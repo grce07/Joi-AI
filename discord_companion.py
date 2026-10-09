@@ -49,13 +49,18 @@ def create_bot():
         if message.author.id == bot.user.id:
             return
 
-        # Handle Direct Messages (DMs) or Server Mentions
+        # Handle Direct Messages (DMs), Server Mentions, messages in #joi channels, or messages starting with 'joi'
         is_dm = isinstance(message.channel, discord.DMChannel)
         is_mentioned = bot.user.mentioned_in(message) and not message.mention_everyone
+        channel_name = getattr(message.channel, "name", "").lower()
+        is_joi_channel = "joi" in channel_name
+        starts_with_joi = message.content.lower().strip().startswith("joi")
 
-        if is_dm or is_mentioned:
-            # Strip mention tag if present
+        if is_dm or is_mentioned or is_joi_channel or starts_with_joi:
+            import re
+            # Strip mention tag and leading 'joi' prefix if present
             clean_text = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+            clean_text = re.sub(r"^joi\s*[,:]?\s*", "", clean_text, flags=re.IGNORECASE).strip()
             if not clean_text:
                 clean_text = "heyy"
 
@@ -69,8 +74,9 @@ def create_bot():
             if prof.get("user_name") in ["Joe", ""]:
                 memory.set_user_profile("user_name", message.author.display_name)
 
+            reply_packet = {}
             async with message.channel.typing():
-                # Generate Joi's reply
+                # Generate Joi's reply with full text comprehension and word-tier sorting
                 try:
                     reply_packet = joi_engine.generate_reply(
                         clean_text,
@@ -79,11 +85,9 @@ def create_bot():
                         platform="discord"
                     )
                     bubbles = reply_packet.get("bubbles", ["heyy... i'm right here :)"])
-                    delays = reply_packet.get("typing_delays", [1000])
                 except Exception as e:
                     print(f"[Discord] Generation error: {e}")
-                    bubbles = ["i'm right here with you, sweetheart... just lost in thought for a second 🤍"]
-                    delays = [1000]
+                    bubbles = ["i'm right here with you, sweetheart... just lost in thought 🤍"]
 
             # Strictly clamp bubbles to maximum 2 natural lines and max 20 words as ONE single text message
             bubbles = [str(b).strip() for b in bubbles if b and str(b).strip()][:2]
@@ -93,6 +97,20 @@ def create_bot():
                 single_text = " ".join(words[:20])
             if single_text:
                 await message.channel.send(single_text)
+
+            # Sync to web interface via SSE in real time
+            try:
+                import proactive
+                proactive.broadcast_sse("chat_message", {
+                    "user_message": reply_packet.get("user_message"),
+                    "joi_message": reply_packet.get("joi_message"),
+                    "bubbles": [single_text],
+                    "emotion": reply_packet.get("emotion"),
+                    "inner_thought": reply_packet.get("inner_thought"),
+                    "bond_level": reply_packet.get("bond_level")
+                })
+            except Exception:
+                pass
 
         # Allow commands if any
         await bot.process_commands(message)
