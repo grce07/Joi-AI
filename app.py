@@ -23,6 +23,22 @@ if hasattr(time, "tzset"):
     except Exception:
         pass
 
+# Single-instance lock to prevent duplicate processes from running and duplicating Discord messages
+import socket
+_instance_lock_socket = None
+def _acquire_instance_lock(port=48209):
+    global _instance_lock_socket
+    try:
+        _instance_lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        _instance_lock_socket.bind(('127.0.0.1', port))
+        _instance_lock_socket.listen(1)
+        return True
+    except socket.error:
+        print("[System] Another instance of Joi is already running! Exiting duplicate process.")
+        sys.exit(0)
+
+_acquire_instance_lock()
+
 import memory
 import joi_engine
 import proactive

@@ -85,15 +85,11 @@ def create_bot():
                     bubbles = ["i'm right here with you, sweetheart... just lost in thought for a second 🤍"]
                     delays = [1000]
 
-            # Strictly clamp bubbles to maximum 2 natural real-person lines
+            # Strictly clamp bubbles to maximum 2 natural lines and send as ONE single text message
             bubbles = [str(b).strip() for b in bubbles if b and str(b).strip()][:2]
-            for i, bubble in enumerate(bubbles):
-                # Small typing indicator between bubbles
-                if i > 0:
-                    delay_sec = min(2.0, max(0.8, delays[i] / 1000.0 if i < len(delays) else 1.0))
-                    async with message.channel.typing():
-                        await asyncio.sleep(delay_sec)
-                await message.channel.send(bubble)
+            single_text = "\n".join(bubbles)
+            if single_text:
+                await message.channel.send(single_text)
 
         # Allow commands if any
         await bot.process_commands(message)
@@ -132,6 +128,10 @@ async def _send_message_coroutine(bubbles: list, target_user_id: str = None, tar
         token, default_user_id = get_discord_config()
         clean_user_id = str(default_user_id or "").replace("discord_", "").strip()
 
+    single_text = "\n".join(bubbles[:2])
+    if not single_text:
+        return False
+
     # 1. Try sending directly to originating channel if specified
     if clean_channel_id:
         try:
@@ -139,11 +139,7 @@ async def _send_message_coroutine(bubbles: list, target_user_id: str = None, tar
             if not channel:
                 channel = await _bot_client.fetch_channel(int(clean_channel_id))
             if channel:
-                for i, bubble in enumerate(bubbles):
-                    if i > 0:
-                        async with channel.typing():
-                            await asyncio.sleep(1.2)
-                    await channel.send(bubble)
+                await channel.send(single_text)
                 print(f"[Discord] Successfully delivered scheduled reminder to channel {clean_channel_id}!")
                 return True
         except Exception as e:
@@ -156,11 +152,7 @@ async def _send_message_coroutine(bubbles: list, target_user_id: str = None, tar
             user = await _bot_client.fetch_user(target_int_id)
             if user:
                 dm_channel = user.dm_channel or await user.create_dm()
-                for i, bubble in enumerate(bubbles):
-                    if i > 0:
-                        async with dm_channel.typing():
-                            await asyncio.sleep(1.2)
-                    await dm_channel.send(bubble)
+                await dm_channel.send(single_text)
                 print(f"[Discord] Successfully delivered scheduled reminder DM to user {user.name} ({clean_user_id})!")
                 return True
         except Exception as e:
