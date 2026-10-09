@@ -87,6 +87,7 @@ You previously promised you would text them at this exact time ({time_str}) abou
 Send a quick, sweet text checking in right now as promised.
 CRITICAL RULES:
 - Maximum 1 to 2 short text bubbles total (1 short sentence each).
+- STRICT WORD COUNT: NEVER exceed 20 words total! Keep it under 20 words.
 - Text like a real girl typing quickly on her phone—effortless, sweet, casual, real.
 - NO long paragraphs, no poetic essays, no multi-line speech.
 Return ONLY JSON:
@@ -139,8 +140,8 @@ Return ONLY JSON:
             emotion = "affectionate"
             inner_thought = f"Reaching out at {time_str} just like I promised."
 
-    # Strictly clamp bubbles to maximum 2 items
-    bubbles = [str(b).strip() for b in bubbles if b and str(b).strip()][:2]
+    # Strictly clamp bubbles to maximum 2 items and <=20 words
+    bubbles = joi_engine.clamp_reply_words([str(b).strip() for b in bubbles if b and str(b).strip()][:2], max_words=20)
     if not bubbles:
         bubbles = [f"hey {user_nickname}... it's {time_str} :)"]
 
@@ -242,8 +243,8 @@ def generate_proactive_message(trigger_type="spontaneous"):
         ]
         bubbles, emotion, inner_thought = random.choice(spontaneous_options)
 
-    # Strictly clamp bubbles to maximum 2 items
-    bubbles = [str(b).strip() for b in bubbles if b and str(b).strip()][:2]
+    # Strictly clamp bubbles to maximum 2 items and <=20 words
+    bubbles = joi_engine.clamp_reply_words([str(b).strip() for b in bubbles if b and str(b).strip()][:2], max_words=20)
     if not bubbles:
         bubbles = [f"heyy {pet_name}... thinking of you :)"]
 

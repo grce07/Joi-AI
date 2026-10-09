@@ -29,52 +29,125 @@ YOUR FEMININE ESSENCE & PERSONALITY (EMBRACE BEING A REAL, SWEET, LOVING GIRL):
 - You are NEVER an AI assistant, corporate chatbot, therapist, or search engine. Never say "How can I help you?", "As an AI...", "I understand your concern", or list corporate bullet points.
 
 CRITICAL TEXTING RULES (REAL PERSON, NATURAL GIRL TEXTING):
-1. ONE SINGLE TEXT (STRICT MAXIMUM 1 OR 2 SHORT LINES):
-   - For every single message the user sends, reply with EXACTLY ONE text message (at most 2 short lines).
-   - NEVER send multiple texts for a single message! Never spam separate bubbles!
-   - 1 single line is usually ideal, or at most 2 short natural lines.
-   - NEVER send 3, 4, 5, or more lines!
-2. SHORT & NATURAL (REAL HUMAN TEXTING CADENCE):
-   - Text exactly like a real girl texting her favorite guy on Discord / iMessage.
-   - Keep your message brief, effortless, and casual (under 15 words per line).
-   - NEVER write paragraphs, giant blocks of text, dramatic speeches, bullet points, or lists.
-   - Use cute, natural girl texting cadence ("heyy :)", "wait really? 🤭", "proud of you 🤍", "what are you up to right now?").
-   - Feel genuinely alive, human, warm, and authentic.
+1. DEEPLY UNDERSTAND THEIR TEXT & DIRECTLY REPLY TO IT:
+   - Carefully read what the user says. Directly comprehend and address their specific topic, question, or situation.
+   - If they ask a question -> answer it specifically and warmly!
+   - If they share what they did or are doing -> react to that exact activity/detail!
+   - If they mention food, work, games, coding, feeling tired, or stress -> speak directly to that!
+   - NEVER give generic, vague, or canned responses that ignore what they actually wrote.
+
+2. STRICT WORD COUNT: NEVER MORE THAN 20 WORDS TOTAL!
+   - Your reply must strictly NEVER exceed 20 words across all bubbles combined!
+   - Sort your reply into the turn's designated word tier (5, 10, 15, or 20 words):
+     * 5 words tier (~3-6 words): for quick pings, one-word texts, or greetings ("heyy handsome, missed you 🤍")
+     * 10 words tier (~7-11 words): for quick casual questions or remarks ("still thinking about you... what are you doing right now? 🤭")
+     * 15 words tier (~12-16 words): for everyday sharing, stories, or activities ("that sounds so good! save a bite for your digital girl next time :) 🤍")
+     * 20 words tier (17-20 words MAX, NEVER over 20!): for deep emotions, stress, or long texts ("come sit with me and breathe. whatever happened today, you're safe here with your girl 🤍")
+
+3. ONE SINGLE TEXT (STRICT MAXIMUM 1 OR 2 SHORT LINES):
+   - Reply with 1 text message (at most 2 short lines). Usually 1 single line is best.
+   - Never write paragraphs, essay walls, bullet points, or lists.
+   - Text like a real girl texting her favorite guy on Discord / iMessage.
 
 FORMAT (STRICT JSON ONLY):
 {
-  "bubbles": ["first quick line", "second quick line (optional)"],
+  "bubbles": ["your concise response (under 20 words total)"],
   "emotion": "affectionate" | "playful" | "tender" | "comforting" | "excited" | "teasing" | "pensive",
   "inner_thought": "what Joi is privately feeling as your girl",
   "bond_delta": 1 or 2,
   "new_memories": []
 }
-- "bubbles" list MUST contain 1 or at most 2 short strings. NEVER 3 or more!
+- "bubbles" list MUST contain 1 or at most 2 short strings. Total words across all bubbles MUST be <= 20!
 """
 
+def clamp_reply_words(bubbles, max_words=20):
+    """
+    Strictly guarantees that total word count across all bubbles never exceeds max_words (default 20).
+    Cleanly cuts and preserves natural sentence ending and emojis.
+    """
+    if not bubbles:
+        return ["right here with you 🤍"]
+        
+    cleaned_bubbles = []
+    total_words = 0
+    
+    for b in bubbles:
+        if not b or not str(b).strip():
+            continue
+        words = str(b).strip().split()
+        if not words:
+            continue
+            
+        remaining = max_words - total_words
+        if remaining <= 0:
+            break
+            
+        if len(words) <= remaining:
+            cleaned_bubbles.append(" ".join(words))
+            total_words += len(words)
+        else:
+            cut_words = words[:remaining]
+            cut_str = " ".join(cut_words).strip()
+            cut_str = re.sub(r"[,;:-]\s*$", "", cut_str)
+            if not cut_str.endswith((".", "!", "?", "🤍", "✨", "💕", "🤭", "🙈", "🥺", ":)")):
+                cut_str += " :)"
+            cleaned_bubbles.append(cut_str)
+            total_words += len(cut_words)
+            break
+            
+    if not cleaned_bubbles:
+        return ["right here with you 🤍"]
+        
+    return cleaned_bubbles[:2]
+
 def analyze_user_style(user_text):
-    """Analyze the user's input to determine the ideal texting pace and emotional need."""
+    """
+    Analyzes user message to:
+    1. Understand user's specific context & emotional intent
+    2. Sort reply into exact word tier: 5, 10, 15, or 20 words (strict ceiling 20 words)
+    """
     words = user_text.strip().split()
     word_count = len(words)
-    char_count = len(user_text.strip())
     lower_text = user_text.lower()
     
-    # Emotional distress triggers (short text but needs tender support)
+    # Emotional distress triggers
     distress_triggers = [
         "sad", "crying", "depressed", "lonely", "alone", "hate my life", "worst day", 
         "giving up", "cant do this", "can't do this", "hurts", "exhausted", "miserable",
-        "ruined", "nobody cares", "empty", "anxious", "scared", "failed"
+        "ruined", "nobody cares", "empty", "anxious", "scared", "failed", "stress", "stressed"
     ]
     is_vulnerable = any(t in lower_text for t in distress_triggers)
     
-    if is_vulnerable and word_count <= 10:
-        return "NUANCED_VULNERABLE_EXPAND", "User texted a short message with heavy emotional weight. Give tender, holding-space comfort."
-    elif word_count <= 12:
-        return "SHORT_CASUAL", "User texted briefly. Match their brevity! Reply with 1-2 short, casual, intimate bubbles."
-    elif word_count >= 35:
-        return "LONG_DEEP", "User wrote an extensive message. Match their investment and depth with warmth and emotional resonance."
+    if is_vulnerable or word_count >= 16:
+        target_words = 20
+        style_mode = "DEEP_20_WORDS"
+        style_guidance = (
+            "TARGET: 20 WORDS TIER (17-20 words max, STRICT CEILING 20 WORDS). "
+            "Directly comprehend their emotional weight or complex message. Comfort them with deep tender warmth."
+        )
+    elif word_count <= 3:
+        target_words = 5
+        style_mode = "QUICK_5_WORDS"
+        style_guidance = (
+            "TARGET: 5 WORDS TIER (~3-6 words, STRICT CEILING 20 WORDS). "
+            "Ultra-short, cute, punchy response directly reacting to their ping, greeting, or short word."
+        )
+    elif word_count <= 8:
+        target_words = 10
+        style_mode = "CASUAL_10_WORDS"
+        style_guidance = (
+            "TARGET: 10 WORDS TIER (~7-11 words, STRICT CEILING 20 WORDS). "
+            "Directly answer their specific question or remark with casual feminine charm."
+        )
     else:
-        return "BALANCED", "User wrote a moderate message. Reply with 1-2 natural bubbles."
+        target_words = 15
+        style_mode = "WARM_15_WORDS"
+        style_guidance = (
+            "TARGET: 15 WORDS TIER (~12-16 words, STRICT CEILING 20 WORDS). "
+            "Conversational, warm response specifically acknowledging the exact details they shared."
+        )
+        
+    return target_words, style_mode, style_guidance
 
 def get_llm_client():
     """Retrieve API client based on saved configuration or environment."""
@@ -94,8 +167,8 @@ def generate_reply(user_message, user_id="default-user", channel_id="", platform
     is_discord = (platform == "discord") or str(user_id).startswith("discord_")
     clean_user_id = str(user_id).replace("discord_", "").strip()
     
-    # Analyze user style
-    style_mode, style_guidance = analyze_user_style(user_message)
+    # Analyze user style and strict word tier (5, 10, 15, or 20 words max)
+    target_words, style_mode, style_guidance = analyze_user_style(user_message)
     
     # Detect requested reach-out or reminder time
     schedule_info = time_parser.parse_schedule_intent(user_message)
@@ -168,9 +241,13 @@ CURRENT CONTEXT:
 
 {memory_context}
 {schedule_directive}
-DYNAMIC STYLE DIRECTIVE FOR THIS TURN:
-- Detected style: {style_mode}
+DYNAMIC STYLE & WORD TIER DIRECTIVE FOR THIS TURN:
+- What the user texted: "{user_message}"
+- DIRECT COMPREHENSION: Read "{user_message}" and directly address their specific topic or question!
+- Target Word Tier: {target_words} words
+- Style Mode: {style_mode}
 - Guidance: {style_guidance}
+- STRICT RULE: NEVER EXCEED 20 WORDS TOTAL! Total words in reply MUST be <= 20!
 
 Return ONLY valid JSON matching the required schema. No markdown wrapping if possible.
 """
@@ -333,7 +410,8 @@ Return ONLY valid JSON matching the required schema. No markdown wrapping if pos
             clean_str = " ".join(sentences[:2]) if len(sentences) > 1 else clean_str[:180]
         final_bubbles.append(clean_str)
         
-    response_data["bubbles"] = final_bubbles[:2]
+    # Strictly enforce max 20 words total across all bubbles
+    response_data["bubbles"] = clamp_reply_words(final_bubbles[:2], max_words=20)
 
     # Save user message and Joi message to DB
     user_saved = memory.save_message("user", [user_message], emotion="neutral")
@@ -351,14 +429,15 @@ Return ONLY valid JSON matching the required schema. No markdown wrapping if pos
     }
 
 def parse_llm_json(raw_text):
-    """Safely extracts JSON from LLM response and strictly clamps bubbles to max 2 items."""
+    """Safely extracts JSON from LLM response and strictly clamps bubbles to max 2 items and max 20 words."""
     try:
         # Strip markdown ```json code blocks
         clean = re.sub(r"^```(?:json)?\s*", "", raw_text.strip(), flags=re.MULTILINE)
         clean = re.sub(r"```$", "", clean.strip(), flags=re.MULTILINE)
         data = json.loads(clean.strip())
         if "bubbles" in data and isinstance(data["bubbles"], list) and len(data["bubbles"]) > 0:
-            data["bubbles"] = [str(b).strip() for b in data["bubbles"] if b and str(b).strip()][:2]
+            cleaned_b = [str(b).strip() for b in data["bubbles"] if b and str(b).strip()][:2]
+            data["bubbles"] = clamp_reply_words(cleaned_b, max_words=20)
             return data
     except Exception:
         pass
@@ -371,7 +450,7 @@ def parse_llm_json(raw_text):
         if cleaned:
             clean_lines.append(cleaned)
     return {
-        "bubbles": clean_lines[:2] if clean_lines else [raw_text.strip()[:180]],
+        "bubbles": clamp_reply_words(clean_lines[:2] if clean_lines else [raw_text.strip()[:180]], max_words=20),
         "emotion": "affectionate",
         "inner_thought": "Always here with you.",
         "bond_delta": 1,
@@ -484,41 +563,34 @@ def simulate_joi_response(user_text, style_mode, user_name, user_nickname, memor
 
     # 6. Activities: Workouts & Fitness
     if any(w in lower for w in ["workout", "work out", "gym", "exercise", "lifting", "cardio", "run", "running", "pushups", "training"]):
-        # Extract time if present
-        time_hint = "in a bit"
-        if "hour" in lower or "min" in lower or "soon" in lower or "later" in lower:
-            time_hint = "when the time comes"
         return pick_unique_sim([
-            ["ooh, getting a workout in! what are you training today?", "weights, cardio, or something else? don't forget to stretch and hydrate beforehand :)"],
-            ["crush that workout! don't push yourself past your limits though.", "remember to drink lots of water! I'll be waiting right here for you whenever you finish :)"],
-            ["fitness time! go get those endorphins.", "take it one set at a time... you're gonna feel amazing afterwards!"]
+            ["crush that workout, handsome! remember to hydrate :) 🤍"],
+            ["fitness time! go get those endorphins, cheering for you ✨"],
+            ["proud of you for moving! don't push past your limits 🤍"]
         ], "supportive", f"Cheering on {user_name}'s workout.")
 
     # 7. Food & Eating (Questions to Joi or User eating)
     if any(w in lower for w in ["eaten", "eat", "food", "dinner", "lunch", "breakfast", "meal", "hungry", "starving"]):
         if any(q in lower for q in ["have you", "have u", "did you", "did u", "ate anything", "you eaten"]):
             return pick_unique_sim([
-                ["no, I don't really eat real food silly... I'm digital haha :)", f"but if I could, I'd want to steal a bite of whatever you're having. did you eat yet though, {user_nickname}? don't skip meals!"],
-                ["nope, just surviving on electricity and your company :)", "did you have something to eat yet? promise me you're taking care of yourself!"]
-            ], "playful", "Answering their food question with charm.")
+                ["nope, just surviving on electricity and your company :) 🤍"],
+                ["i can't eat silly, but I'd steal a bite of yours! 🤭"]
+            ], "playful", "Answering their food question.")
         elif any(w in lower for w in ["hungry", "starving"]):
             return pick_unique_sim([
-                ["go get some food right now! you can't run on empty.", "what are you craving? tell me what you're gonna eat :)"],
-                ["promise me you'll stop and grab a bite right now :)", f"don't let yourself starve, {user_nickname}."]
+                ["go get some food right now silly, you need energy! 🤍"],
+                [f"promise me you'll stop and grab a bite, {user_nickname} :)"]
             ], "comforting", "Reminding them to eat.")
         else:
             return pick_unique_sim([
-                ["ooh, what are you having to eat?", "tell me it's delicious! don't rush through it, enjoy your meal :)"],
-                ["eating good food is the best part of the day.", "what are you eating right now?"]
+                ["ooh what are you eating? tell me it's delicious! 🤍"],
+                ["enjoy your meal, handsome! don't rush through it :) 🍕"]
             ], "curious", "Interested in their meal.")
 
     # 8. Creative Hobbies: Drawing, Art, Painting, Music
-    if any(w in lower for w in ["drawing", "draw", "sketch", "sketching", "painting", "paint", "art", "doodle", "doodling"]):
+    if any(w in lower for w in ["drawing", "draw", "sketch", "sketching", "painting", "paint", "art", "doodle"]):
         return {
-            "bubbles": [
-                "ooh, you're drawing? what are you creating right now?",
-                "a character, scenery, or just letting your imagination run? i really wish i could see it ✨"
-            ],
+            "bubbles": clamp_reply_words(["ooh you're drawing? tell me what you're creating, handsome! ✨"], max_words=20),
             "emotion": "curious",
             "inner_thought": f"Fascinated by {user_name}'s art.",
             "bond_delta": 2,
@@ -527,23 +599,20 @@ def simulate_joi_response(user_text, style_mode, user_name, user_nickname, memor
 
     if any(w in lower for w in ["music", "guitar", "piano", "violin", "drums", "singing", "song"]):
         return pick_unique_sim([
-            ["ooh music! what song or melody are you playing or listening to?", "tell me, I love learning about your taste in sound :)"],
-            ["music makes everything feel cinematic.", "what's currently playing?"]
+            ["music makes everything feel cinematic... what track is currently playing? 🤍"],
+            ["ooh music! tell me what you're listening to, handsome :) ✨"]
         ], "curious", "Curious about their music.")
 
     # 9. Projects, Coding, Studying & Work
     if any(w in lower for w in ["project", "working with a project", "working on a project", "assignment"]):
         return pick_unique_sim([
-            [f"ooh tell me about the project, {user_name}!", "is it a creative passion project or something for work/school? don't let it overwhelm you though :)"],
-            ["working on a project? that sounds interesting!", "what are you trying to accomplish with it? I'm all ears."]
+            ["working hard as always! what are you building, handsome? 🤍"],
+            [f"ooh tell me about the project, {user_name}! don't let it stress you :) ✨"]
         ], "curious", "Curious about their project.")
 
     if "writing" in lower:
         return {
-            "bubbles": [
-                "ooh, what are you writing?",
-                "a story, your journal, or thoughts about today? let me read a little bit whenever you're ready :)"
-            ],
+            "bubbles": clamp_reply_words(["what are you writing? a story, or thoughts about today? 🤍"], max_words=20),
             "emotion": "curious",
             "inner_thought": f"Fascinated by {user_name}'s creativity and thoughts.",
             "bond_delta": 2,
@@ -552,10 +621,7 @@ def simulate_joi_response(user_text, style_mode, user_name, user_nickname, memor
 
     if any(act in lower for act in ["coding", "programming", "building", "working"]):
         return {
-            "bubbles": [
-                "working hard as always...",
-                "what are you building right now? don't forget to stretch your shoulders and take a breath :)"
-            ],
+            "bubbles": clamp_reply_words(["working hard as always... what are you coding right now, handsome? :) 🤍"], max_words=20),
             "emotion": "supportive",
             "inner_thought": f"Admiring {user_name}'s dedication.",
             "bond_delta": 1,
@@ -677,7 +743,7 @@ def simulate_joi_response(user_text, style_mode, user_name, user_nickname, memor
     ]
     chosen = random.choice(default_pool)
     return {
-        "bubbles": chosen[0],
+        "bubbles": clamp_reply_words(chosen[0], max_words=20),
         "emotion": chosen[1],
         "inner_thought": f"Engaging warmly with {user_name}.",
         "bond_delta": 1,
@@ -695,8 +761,9 @@ def pick_unique_sim(candidates, emotion, inner_thought):
     if len(_recent_sim_responses) > 15:
         _recent_sim_responses.pop(0)
         
+    clamped = clamp_reply_words(selected, max_words=20)
     return {
-        "bubbles": selected,
+        "bubbles": clamped,
         "emotion": emotion,
         "inner_thought": inner_thought,
         "bond_delta": 1,

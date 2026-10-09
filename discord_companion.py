@@ -85,9 +85,12 @@ def create_bot():
                     bubbles = ["i'm right here with you, sweetheart... just lost in thought for a second 🤍"]
                     delays = [1000]
 
-            # Strictly clamp bubbles to maximum 2 natural lines and send as ONE single text message
+            # Strictly clamp bubbles to maximum 2 natural lines and max 20 words as ONE single text message
             bubbles = [str(b).strip() for b in bubbles if b and str(b).strip()][:2]
             single_text = "\n".join(bubbles)
+            words = single_text.split()
+            if len(words) > 20:
+                single_text = " ".join(words[:20])
             if single_text:
                 await message.channel.send(single_text)
 
@@ -129,6 +132,9 @@ async def _send_message_coroutine(bubbles: list, target_user_id: str = None, tar
         clean_user_id = str(default_user_id or "").replace("discord_", "").strip()
 
     single_text = "\n".join(bubbles[:2])
+    words = single_text.split()
+    if len(words) > 20:
+        single_text = " ".join(words[:20])
     if not single_text:
         return False
 
