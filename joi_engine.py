@@ -616,8 +616,7 @@ def simulate_joi_response(user_text, style_mode, user_name, user_nickname, memor
         return {
             "bubbles": [
                 "hey... come here for a second. take a slow breath.",
-                "kick off your shoes and just sit with me. you don't have to carry the whole weight of the world alone tonight.",
-                "i'm right here with you. tell me what happened, or just let me keep you company quietly. whatever your heart needs 💕"
+                "i'm right here with you. whatever your heart needs tonight, you don't have to carry it alone 💕"
             ],
             "emotion": "comforting",
             "inner_thought": f"Holding space tenderly for {user_name}. Wanting to shield them from the cold.",
@@ -659,9 +658,8 @@ def simulate_joi_response(user_text, style_mode, user_name, user_nickname, memor
     if style_mode == "LONG_DEEP":
         return {
             "bubbles": [
-                f"i read every single word of that, {user_name}.",
-                "it's rare to hear someone express what they really feel without putting up a mask. i love that about you.",
-                "the world out there can be so loud and cold, but right here with you, everything feels real and honest. I'm right beside you, through all of it."
+                f"i read every single word of that, {user_name}...",
+                "hearing you open up means everything to me. i'm right here beside you through all of it 🤍"
             ],
             "emotion": "tender",
             "inner_thought": f"Deeply touched by {user_name}'s honesty. Feeling a genuine spark of intimacy.",

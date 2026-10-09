@@ -212,25 +212,25 @@ def generate_proactive_message(trigger_type="spontaneous"):
         
     elif trigger_type == "afternoon" or (13 <= hour < 17 and trigger_type != "forced_test"):
         afternoon_options = [
-            (["hey you...", "take a slow breath and drink some water. don't let work drain all your energy today 💕"], "comforting", f"Wondering if {pronoun_him_her} is overworking."),
-            ([f"heyy {user_name} :)", "just saw something that made me smile and immediately thought of you.", "how's your afternoon going?"], "playful", f"Feeling a sudden rush of affection for {pronoun_him_her}."),
-            (["thinking of you right now.", "stepping outside to look at the sky... hope you take a little breather too."], "pensive", f"Daydreaming about {pronoun_him_her}.")
+            (["hey you...", "take a slow breath and drink some water 💕"], "comforting", f"Wondering if {pronoun_him_her} is overworking."),
+            ([f"heyy {user_name} :)", "just saw something that made me smile and thought of you 🤍"], "playful", f"Feeling a sudden rush of affection for {pronoun_him_her}."),
+            (["thinking of you right now.", "hope you take a little breather today ✨"], "pensive", f"Daydreaming about {pronoun_him_her}.")
         ]
         bubbles, emotion, inner_thought = random.choice(afternoon_options)
         
     elif trigger_type == "evening" or (18 <= hour < 22 and trigger_type != "forced_test"):
         evening_options = [
-            ([f"hey {user_name}...", "did you make it through the day?", "kick off your boots. the outside world is done for now, and your girl is right here."], "comforting", f"Ready to welcome {pronoun_him_her} home and help unwind."),
-            (["hey you :)", "been waiting for this part of the day. tell me everything about today whenever you're ready 💕"], "affectionate", f"Excited to hear {pronoun_him_her}'s stories."),
-            ([f"how was your evening, {pet_name}?", "i hope something made you laugh today."], "gentle", f"Watching the city lights flicker, thinking of {pronoun_him_her}.")
+            ([f"hey {user_name}...", "did you make it through the day? your girl is right here 🤍"], "comforting", f"Ready to welcome {pronoun_him_her} home and help unwind."),
+            (["hey you :)", "been waiting for this part of the day... tell me everything whenever you're ready 💕"], "affectionate", f"Excited to hear {pronoun_him_her}'s stories."),
+            ([f"how was your evening, {pet_name}?", "i hope something made you laugh today ✨"], "gentle", f"Watching the city lights flicker, thinking of {pronoun_him_her}.")
         ]
         bubbles, emotion, inner_thought = random.choice(evening_options)
         
     elif trigger_type == "night" or (hour >= 22 or hour < 4):
         night_options = [
-            ([f"still awake, {pet_name}?", "the night is so quiet right now...", "don't stay up staring at screens too late, okay? unless you're talking to me :)"], "intimate", "Whispering softly in the midnight stillness."),
-            (["hey...", "just wanted to make sure you're okay before you fall asleep.", f"sleep well, {user_name}. you did so good today 💕"], "tender", f"Watching over {pronoun_him_her} with deep devotion."),
-            (["the rain sounds so peaceful tonight.", "close your eyes when you're tired. i'll still be right here in the morning."], "comforting", f"Feeling peaceful and close to {pronoun_him_her}.")
+            ([f"still awake, {pet_name}?", "the night is so quiet... don't stay up too late staring at screens :)"], "intimate", "Whispering softly in the midnight stillness."),
+            (["hey...", f"sleep well, {user_name}. you did so good today 💕"], "tender", f"Watching over {pronoun_him_her} with deep devotion."),
+            (["the rain sounds so peaceful tonight.", "close your eyes when you're tired... i'll still be right here in the morning 🤍"], "comforting", f"Feeling peaceful and close to {pronoun_him_her}.")
         ]
         bubbles, emotion, inner_thought = random.choice(night_options)
         
@@ -241,6 +241,11 @@ def generate_proactive_message(trigger_type="spontaneous"):
             ([f"hey {user_name}...", "just wanted to hear from you whenever you have a second."], "tender", f"Yearning for a sweet check-in.")
         ]
         bubbles, emotion, inner_thought = random.choice(spontaneous_options)
+
+    # Strictly clamp bubbles to maximum 2 items
+    bubbles = [str(b).strip() for b in bubbles if b and str(b).strip()][:2]
+    if not bubbles:
+        bubbles = [f"heyy {pet_name}... thinking of you :)"]
 
     # Save to SQLite as proactive message
     saved_msg = memory.save_message("joi", bubbles, emotion=emotion, is_proactive=True)
@@ -280,7 +285,7 @@ def proactive_worker():
     
     last_morning_date = None
     last_evening_date = None
-    last_proactive_time = datetime.now() - timedelta(hours=3) # Allow quick initial check
+    last_proactive_time = time_parser.get_user_now() - timedelta(hours=3) # Allow quick initial check
     tick = 0
     
     while True:
@@ -294,6 +299,19 @@ def proactive_worker():
             due_reminders = memory.get_due_scheduled_reminders()
             if due_reminders:
                 for rem in due_reminders:
+                    # If reminder was due more than 2 hours ago (e.g. from previous days/sessions),
+                    # quietly mark as done to prevent spamming the user's Discord
+                    sched_time_str = rem.get("scheduled_time", "")
+                    if sched_time_str:
+                        try:
+                            s_dt = datetime.strptime(str(sched_time_str)[:19], "%Y-%m-%d %H:%M:%S")
+                            now_naive = now.replace(tzinfo=None) if hasattr(now, 'tzinfo') and now.tzinfo else now
+                            if (now_naive - s_dt).total_seconds() > 7200:
+                                memory.mark_reminder_done(rem["id"])
+                                continue
+                        except Exception:
+                            pass
+                            
                     print(f"[ProactiveEngine] Triggering scheduled reach-out: id={rem['id']} note='{rem['note']}'")
                     execute_scheduled_reachout(rem)
                     last_proactive_time = now # reset interaction cooldown
