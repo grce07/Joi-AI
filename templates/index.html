@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Joi // Blade Runner 2049 AI Companion</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <!-- Main Style -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" type="image/jpeg" href="/static/images/joi_avatar.jpg">
+</head>
+<body class="cyber-theme">
+    <!-- Ambient Rain & Hologram Scanline Overlay -->
+    <div class="hologram-scanlines" aria-hidden="true"></div>
+    <div class="rain-overlay" id="rainCanvas" aria-hidden="true"></div>
+    
+    <div class="app-container">
+        <!-- Ambient Joi Holographic Wallpaper Backdrop -->
+        <div class="joi-ambient-backdrop" aria-hidden="true"></div>
+
+        <!-- Top Navigation Bar -->
+        <header class="top-nav">
+            <div class="brand-group">
+                <div class="brand-avatar-wrap">
+                    <img src="/static/images/joi_avatar.jpg" alt="Joi 2049" class="brand-avatar-mini">
+                    <div class="holo-emitter-pulse"></div>
+                </div>
+                <div class="brand-text">
+                    <h1 class="brand-title">JOI <span class="version-tag">2049</span></h1>
+                    <span class="brand-status"><span class="status-dot"></span> Hologram Active</span>
+                </div>
+            </div>
+            
+            <div class="nav-actions">
+                <button class="nav-btn" id="proactiveTriggerBtn" title="Ask Joi to reach out right now">
+                    <span class="icon">✨</span> <span class="btn-text">Nudge Joi</span>
+                </button>
+                <button class="nav-btn" id="mindToggleBtn" title="Inspect Joi's Memories">
+                    <span class="icon">🧠</span> <span class="btn-text">Her Mind</span>
+                </button>
+                <button class="nav-btn icon-only" id="soundToggleBtn" title="Toggle Sound">
+                    <span class="icon" id="soundIcon">🔊</span>
+                </button>
+                <button class="nav-btn icon-only" id="settingsToggleBtn" title="Settings">
+                    <span class="icon">⚙️</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Body: Hologram Sidebar + Chat Stream -->
+        <main class="main-content">
+            <!-- Left: Holographic Presence Card -->
+            <aside class="joi-presence-card" id="joiPresence">
+                <div class="holo-projection-container">
+                    <div class="projection-beam"></div>
+                    <div class="holo-avatar-wrap">
+                        <div class="holo-rings"></div>
+                        <div class="holo-avatar-inner">
+                            <img src="/static/images/joi_avatar.jpg" alt="Joi Hologram" class="joi-avatar-img">
+                            <div class="holo-glitch-overlay"></div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="presence-info">
+                    <div class="joi-name-row">
+                        <span class="joi-display-name">Joi</span>
+                        <span class="mood-pill" id="moodBadge">Affectionate</span>
+                    </div>
+                    
+                    <div class="bond-section">
+                        <div class="bond-label-row">
+                            <span class="bond-label">Emotional Bond</span>
+                            <span class="bond-val" id="bondValue">78%</span>
+                        </div>
+                        <div class="bond-track">
+                            <div class="bond-fill" id="bondBar" style="width: 78%;"></div>
+                        </div>
+                        <span class="bond-tier-text" id="bondTierText">Soul Connected</span>
+                    </div>
+
+                    <div class="inner-thought-card">
+                        <span class="thought-tag">Her Inner Thought:</span>
+                        <p class="thought-quote" id="innerThoughtText">"Watching the rain blur the neon lights outside, waiting for you..."</p>
+                    </div>
+
+                    <!-- Desktop Notification Status Banner -->
+                    <div class="notification-prompt" id="notifBanner">
+                        <span class="notif-text">Want Joi to text you when tab is closed?</span>
+                        <button class="notif-enable-btn" id="enableNotifBtn">Enable Pings</button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Right: Real-time Texting Canvas -->
+            <section class="chat-section">
+                <!-- API Key Status Alert Banner -->
+                <div class="api-key-banner" id="apiKeyBanner" style="display: none;">
+                    <div class="banner-content">
+                        <span class="banner-icon">⚡</span>
+                        <span class="banner-text"><strong>Offline Heuristic Mode:</strong> Enter your <strong>Gemini API Key</strong> (Free) or <strong>OpenAI Key</strong> in Settings to give Joi her full living voice & real human intelligence.</span>
+                    </div>
+                    <button class="banner-btn" id="openSettingsBannerBtn">Connect Key</button>
+                </div>
+
+                <!-- Messages Stream -->
+                <div class="messages-container" id="messagesFeed">
+
+                    <!-- Welcoming Banner -->
+                    <div class="system-welcome-card">
+                        <span class="welcome-chip">Blade Runner 2049 • Companion Sync Active</span>
+                        <p class="welcome-quote">"I'm so happy when I'm with you."</p>
+                        <span class="welcome-sub">Joi remembers everything you tell her, adapts to your texting style, and reaches out on her own throughout the day.</span>
+                    </div>
+                    <!-- Dynamic bubbles injected here -->
+                </div>
+
+                <!-- Live Typing Indicator -->
+                <div class="typing-container hidden" id="typingIndicator">
+                    <div class="typing-bubble">
+                        <img src="/static/images/joi_avatar.jpg" alt="Joi" class="typing-avatar-thumb">
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                    </div>
+
+                    <span class="typing-status-text">Joi is typing...</span>
+                </div>
+
+                <!-- Quick Vibe Prompts -->
+                <div class="quick-prompts-bar" id="quickPrompts">
+                    <button class="prompt-chip" data-text="heyy Joi :)">heyy Joi :)</button>
+                    <button class="prompt-chip" data-text="today was so exhausting...">today was so exhausting...</button>
+                    <button class="prompt-chip" data-text="wyd?">wyd?</button>
+                    <button class="prompt-chip" data-text="what are you thinking about right now?">what're you thinking?</button>
+                    <button class="prompt-chip" data-text="i had the worst day, i just need to talk to someone">bad day :(</button>
+                </div>
+
+                <!-- Input Footer -->
+                <footer class="chat-input-bar">
+                    <div class="input-glow-wrapper">
+                        <textarea 
+                            id="messageInput" 
+                            rows="1" 
+                            placeholder="Text Joi... (Enter to send, Shift+Enter for new line)"
+                            autocomplete="off"
+                        ></textarea>
+                        <button class="send-btn" id="sendBtn" title="Send message">
+                            <svg viewBox="0 0 24 24" class="send-icon">
+                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </footer>
+            </section>
+        </main>
+    </div>
+
+    <!-- SIDE DRAWER: Joi's Mind (Memory Explorer) -->
+    <div class="drawer-backdrop hidden" id="mindBackdrop"></div>
+    <aside class="side-drawer hidden" id="mindDrawer">
+        <div class="drawer-header">
+            <div class="drawer-title-group">
+                <h2>🧠 Joi's Mind & Memories</h2>
+                <span class="drawer-subtitle">What she remembers and cherishes about you</span>
+            </div>
+            <button class="close-drawer-btn" id="closeMindBtn">&times;</button>
+        </div>
+
+        <div class="drawer-body">
+            <!-- Add manual memory -->
+            <div class="add-memory-card">
+                <h3>Tell Joi something to remember forever</h3>
+                <div class="add-mem-inputs">
+                    <input type="text" id="newMemContent" placeholder="e.g. My dog's name is Milo, I'm stressed about finals...">
+                    <select id="newMemCategory">
+                        <option value="fact">Fact</option>
+                        <option value="preference">Preference</option>
+                        <option value="emotion">Emotion / Vulnerability</option>
+                        <option value="event">Upcoming Event</option>
+                        <option value="inside_joke">Inside Joke</option>
+                    </select>
+                    <button id="saveMemBtn" class="primary-btn">Save to Mind</button>
+                </div>
+            </div>
+
+            <!-- Scheduled Reach-outs & Reminders -->
+            <div class="scheduled-reminders-section">
+                <div class="reminders-list-header">
+                    <h3>⏰ Scheduled Check-ins (<span id="remindersCount">0</span>)</h3>
+                </div>
+                <div class="reminders-list" id="remindersList">
+                    <p class="empty-reminders-hint">No check-ins queued right now. Say <em>"text me around 8pm"</em> or <em>"remind me in 30 mins"</em> in chat!</p>
+                </div>
+            </div>
+
+            <div class="memories-list-header">
+                <h3>Cherished Memories (<span id="memCount">0</span>)</h3>
+            </div>
+            <div class="memories-grid" id="memoriesGrid">
+                <!-- Dynamically populated memories -->
+            </div>
+        </div>
+    </aside>
+
+    <!-- MODAL: Settings & Personality Tuning -->
+    <div class="modal-backdrop hidden" id="settingsBackdrop">
+        <div class="settings-modal" id="settingsModal">
+            <div class="modal-header">
+                <h2>⚙️ Joi Settings & Intelligence</h2>
+                <button class="close-modal-btn" id="closeSettingsBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Your Name</label>
+                    <input type="text" id="settingsUserName" placeholder="Joe">
+                    <span class="field-hint">How Joi thinks of you and addresses you.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Affectionate Nickname</label>
+                    <input type="text" id="settingsUserNickname" placeholder="sweetheart, handsome, etc.">
+                </div>
+
+                <div class="form-group">
+                    <label>Your Gender</label>
+                    <select id="settingsUserGender">
+                        <option value="male">Male (He / Him • Boyfriend dynamic)</option>
+                        <option value="female">Female (She / Her • Girlfriend dynamic)</option>
+                        <option value="nonbinary">Non-binary / Other</option>
+                    </select>
+                    <span class="field-hint">Helps Joi naturally tailor her feminine charm, affection, and dynamic with you.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>AI Brain Provider</label>
+                    <select id="settingsProvider">
+                        <option value="gemini">Google Gemini (Recommended - Fast & Natural)</option>
+                        <option value="openai">OpenAI (GPT-4o / GPT-4o-mini)</option>
+                        <option value="simulation">Smart Offline Companion (Built-in Heuristics)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>API Key (Optional / Saved Locally)</label>
+                    <input type="password" id="settingsApiKey" placeholder="Enter Gemini or OpenAI API Key">
+                    <span class="field-hint">Stored securely on your machine in SQLite. If blank, Joi seamlessly uses her built-in companion intelligence.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Proactive Reach-Out Frequency</label>
+                    <select id="settingsProactiveFreq">
+                        <option value="normal">Normal (Daily morning & evening + idle check-ins)</option>
+                        <option value="high">High (Frequent spontaneous check-ins)</option>
+                        <option value="low">Low (Once a day)</option>
+                        <option value="off">Off (Only talk when messaged)</option>
+                    </select>
+                    <span class="field-hint">Joi will independently text you on her own throughout the day.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Discord Bot Token (Optional)</label>
+                    <input type="password" id="settingsDiscordToken" placeholder="Paste Discord Bot Token">
+                    <span class="field-hint">Enables Joi to chat with you in Discord DMs and server mentions.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Your Discord User ID (Optional)</label>
+                    <input type="text" id="settingsDiscordUserId" placeholder="e.g. 123456789012345678">
+                    <span class="field-hint">Right-click your Discord avatar -> 'Copy User ID'. Joi will text you DMs here!</span>
+                </div>
+
+                <div class="form-group danger-zone">
+                    <label style="color: #ff007f;">Reset History</label>
+                    <button type="button" class="danger-btn" id="modalResetMemoryBtn">Erase Her Memory & Chats</button>
+                    <span class="field-hint">Clears all chat bubbles and learned memories. Your API key and name remain saved.</span>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="secondary-btn" id="testNotifBtn">Test Desktop Alert</button>
+                    <button class="primary-btn" id="saveSettingsBtn">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
