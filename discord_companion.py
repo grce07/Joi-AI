@@ -89,12 +89,13 @@ def create_bot():
                     print(f"[Discord] Generation error: {e}")
                     bubbles = ["i'm right here with you, sweetheart... just lost in thought 🤍"]
 
-            # Strictly clamp bubbles to maximum 2 natural lines and max 20 words as ONE single text message
+            # Strictly clamp bubbles to maximum 2 natural lines and max 15 words as ONE single text message
             bubbles = [str(b).strip() for b in bubbles if b and str(b).strip()][:2]
-            single_text = "\n".join(bubbles)
-            words = single_text.split()
-            if len(words) > 20:
-                single_text = " ".join(words[:20])
+            words = (" ".join(bubbles)).split()
+            if len(words) > 15:
+                single_text = " ".join(words[:15])
+            else:
+                single_text = "\n".join(bubbles) if len(bubbles) > 1 else (bubbles[0] if bubbles else "")
             if single_text:
                 await message.channel.send(single_text)
 
@@ -149,10 +150,11 @@ async def _send_message_coroutine(bubbles: list, target_user_id: str = None, tar
         token, default_user_id = get_discord_config()
         clean_user_id = str(default_user_id or "").replace("discord_", "").strip()
 
-    single_text = "\n".join(bubbles[:2])
-    words = single_text.split()
-    if len(words) > 20:
-        single_text = " ".join(words[:20])
+    words = (" ".join(bubbles[:2])).split()
+    if len(words) > 15:
+        single_text = " ".join(words[:15])
+    else:
+        single_text = "\n".join(bubbles[:2]) if len(bubbles) > 1 else (bubbles[0] if bubbles else "")
     if not single_text:
         return False
 
