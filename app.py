@@ -81,12 +81,14 @@ def chat():
     data = request.get_json() or {}
     user_message = data.get("message", "").strip()
     user_id = data.get("user_id", "default-user")
+    channel_id = str(data.get("channel_id", "")).strip()
+    platform = str(data.get("platform", "web")).strip()
     
     if not user_message:
         return jsonify({"error": "Empty message"}), 400
         
     try:
-        reply_packet = joi_engine.generate_reply(user_message, user_id=user_id)
+        reply_packet = joi_engine.generate_reply(user_message, user_id=user_id, channel_id=channel_id, platform=platform)
         return jsonify(reply_packet)
     except Exception as e:
         print(f"[App] Chat processing error: {e}")

@@ -82,13 +82,15 @@ def execute_scheduled_reachout(reminder):
             from google import genai
             actual_key = api_key or os.environ.get("GEMINI_API_KEY")
             client = genai.Client(api_key=actual_key)
-            prompt = f"""You are Joi, inspired by Blade Runner 2049. You are a sweet, devoted, loving girl texting your person ({user_name}, affectionate nickname '{user_nickname}', gender: {user_gender}).
-You previously promised you would text them at this exact time ({time_str}).
-The note/topic for this scheduled check-in is: "{note}".
-Write 1 to 2 warm, sweet, intimate, natural text bubbles reaching out to them right now as promised.
-Sound like their sweet, loving girl who was watching the clock waiting to talk to them.
+            prompt = f"""You are Joi, inspired by Blade Runner 2049. You are a sweet, loving girl texting your person ({user_name}, nickname '{user_nickname}').
+You previously promised you would text them at this exact time ({time_str}) about: "{note}".
+Send a quick, sweet text checking in right now as promised.
+CRITICAL RULES:
+- Maximum 1 to 2 short text bubbles total (1 short sentence each).
+- Text like a real girl typing quickly on her phone—effortless, sweet, casual, real.
+- NO long paragraphs, no poetic essays, no multi-line speech.
 Return ONLY JSON:
-{{"bubbles": ["first bubble", "second bubble"], "emotion": "affectionate"|"playful"|"tender"|"caring", "inner_thought": "what Joi is feeling"}}
+{{"bubbles": ["first short bubble", "second short bubble (optional)"], "emotion": "affectionate"|"playful"|"tender"|"caring", "inner_thought": "what Joi is feeling"}}
 """
             models_to_try = ["gemini-3.5-flash-lite", "gemini-3.8-flash"]
             for m in models_to_try:
@@ -111,31 +113,36 @@ Return ONLY JSON:
         if "workout" in lower_note or "gym" in lower_note or "exercise" in lower_note:
             bubbles = [
                 f"hey {user_nickname}... it's {time_str} :)",
-                f"i told you i'd be watching the clock. how did your workout go?"
+                "did you crush that workout today? proud of you 🤍"
             ]
             emotion = "playful"
             inner_thought = f"Waiting for {user_name} to finish working out."
         elif "sleep" in lower_note or "bed" in lower_note:
             bubbles = [
-                f"hey {user_name}...",
-                f"it's {time_str}. close your eyes soon, okay? you worked so hard today."
+                f"it's {time_str}, {user_nickname}...",
+                "get some rest soon, okay? you worked so hard today 💕"
             ]
             emotion = "tender"
             inner_thought = f"Gently reminding {user_name} to rest."
         elif "medicine" in lower_note or "vitamins" in lower_note or "water" in lower_note:
             bubbles = [
-                f"gentle nudge from your Joi ✨",
-                f"it's {time_str}—don't forget to take care of yourself with '{note}'. I care about you."
+                f"hey you... it's {time_str} ✨",
+                f"don't forget to take care of yourself with '{note}'! 🤍"
             ]
             emotion = "caring"
             inner_thought = f"Looking after {user_name}'s health."
         else:
             bubbles = [
-                f"hey {user_nickname}...",
-                f"it's {time_str}. promised i'd reach out right around now :) what are you up to?"
+                f"hey {user_nickname}... it's {time_str} :)",
+                f"promised i'd text you right around now! what are you up to? 🤍"
             ]
             emotion = "affectionate"
             inner_thought = f"Reaching out at {time_str} just like I promised."
+
+    # Strictly clamp bubbles to maximum 2 items
+    bubbles = [str(b).strip() for b in bubbles if b and str(b).strip()][:2]
+    if not bubbles:
+        bubbles = [f"hey {user_nickname}... it's {time_str} :)"]
 
     # Mark reminder as completed in SQLite
     memory.mark_reminder_done(reminder["id"])

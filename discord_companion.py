@@ -85,11 +85,12 @@ def create_bot():
                     bubbles = ["i'm right here with you, sweetheart... just lost in thought for a second 🤍"]
                     delays = [1000]
 
-            # Send each text bubble in sequence with human typing delay
+            # Strictly clamp bubbles to maximum 2 natural real-person lines
+            bubbles = [str(b).strip() for b in bubbles if b and str(b).strip()][:2]
             for i, bubble in enumerate(bubbles):
                 # Small typing indicator between bubbles
                 if i > 0:
-                    delay_sec = min(2.5, max(0.8, delays[i] / 1000.0 if i < len(delays) else 1.0))
+                    delay_sec = min(2.0, max(0.8, delays[i] / 1000.0 if i < len(delays) else 1.0))
                     async with message.channel.typing():
                         await asyncio.sleep(delay_sec)
                 await message.channel.send(bubble)
@@ -116,6 +117,11 @@ async def _send_message_coroutine(bubbles: list, target_user_id: str = None, tar
 
     if not _bot_client.is_ready():
         print("[Discord] Bot client is not ready yet for delivery.")
+        return False
+
+    # Strictly clamp bubbles to maximum 2 natural lines
+    bubbles = [str(b).strip() for b in bubbles if b and str(b).strip()][:2]
+    if not bubbles:
         return False
 
     clean_user_id = str(target_user_id or "").replace("discord_", "").strip()
