@@ -51,16 +51,19 @@ def parse_schedule_intent(text):
     ]
     
     has_trigger = any(t in lower for t in intent_triggers)
-    if not has_trigger and not re.search(r"\b(at|around|by|in|after)\s+\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?\b", lower):
+    if not has_trigger and not re.search(r"\b(at|around|by|in|after|within)\s*\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?\b", lower):
         return {"has_schedule": False}
 
     target_dt = None
     note = "checking in as promised"
 
     # Extract note/subject if "remind me to <do something>"
-    remind_match = re.search(r"remind me\s+(?:to\s+)?(.+?)(?:\s+(?:at|around|in|after|by)\s+|$)", lower)
+    remind_match = re.search(r"remind me\s+(?:to\s+)?(.+?)(?:\s+(?:at|around|in|after|within|by)\s+|$)", lower)
     if remind_match:
         subject = remind_match.group(1).strip()
+        subject = re.sub(r'\b(?:on|in)\s+discord\b', '', subject).strip()
+        subject = re.sub(r'^(?:at|around|in|after|within|by)\s+.*', '', subject).strip()
+        subject = re.sub(r'^\d+\s*(?:mins?|minutes?|m|hrs?|hours?|h|seconds?|secs?|s).*', '', subject).strip()
         if subject and len(subject) > 2:
             note = subject
             
@@ -68,14 +71,16 @@ def parse_schedule_intent(text):
     about_match = re.search(r"\babout\s+(.+)$", lower)
     if about_match and note == "checking in as promised":
         subj = about_match.group(1).strip()
+        subj = re.sub(r'\b(?:on|in)\s+discord\b', '', subj).strip()
         if subj:
             note = subj
 
     # 1. Relative time:
     # "in X minutes / mins / m / hours / hrs / h / seconds / secs / s"
     # "after X minutes / mins / m / hours / hrs / h"
+    # "within X minutes / mins / m / hours / hrs / h"
     # "X mins later / from now"
-    rel_match = re.search(r"\b(?:in|after)\s+(\d+)\s*(mins?|minutes?|m|hrs?|hours?|h|seconds?|secs?|s)\b", lower)
+    rel_match = re.search(r"\b(?:in|after|within)\s*(\d+)\s*(mins?|minutes?|m|hrs?|hours?|h|seconds?|secs?|s)\b", lower)
     if not rel_match:
         rel_match = re.search(r"\b(\d+)\s*(mins?|minutes?|m|hrs?|hours?|h|seconds?|secs?|s)\s+(?:later|from now)\b", lower)
 
