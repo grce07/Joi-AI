@@ -82,10 +82,14 @@ def get_llm_client():
     
     return provider, api_key, model_name
 
-def generate_reply(user_message, user_id="default-user"):
+def generate_reply(user_message, user_id="default-user", channel_id="", platform="web"):
     """Main generation pipeline for Joi's reply."""
-    now_dt = datetime.now()
+    now_dt = time_parser.get_user_now()
     current_time_str = now_dt.strftime("%A, %I:%M %p")
+    
+    # Identify platform and sanitize user ID
+    is_discord = (platform == "discord") or str(user_id).startswith("discord_")
+    clean_user_id = str(user_id).replace("discord_", "").strip()
     
     # Analyze user style
     style_mode, style_guidance = analyze_user_style(user_message)
@@ -95,11 +99,18 @@ def generate_reply(user_message, user_id="default-user"):
     scheduled_reachout_data = None
     schedule_directive = ""
     if schedule_info.get("has_schedule"):
+        target_platform = "discord" if is_discord else "all"
+        target_user_id = clean_user_id if is_discord else ""
+        target_channel_id = str(channel_id or "") if is_discord else ""
+
         rem_id = memory.add_scheduled_reminder(
             note=schedule_info["note"],
             scheduled_time=schedule_info["target_dt"],
             context=user_message,
-            prompt_hint=f"Check in at {schedule_info['target_time_str']}"
+            prompt_hint=f"Check in at {schedule_info['target_time_str']}",
+            target_platform=target_platform,
+            target_channel_id=target_channel_id,
+            target_user_id=target_user_id
         )
         scheduled_reachout_data = {
             "id": rem_id,

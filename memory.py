@@ -75,10 +75,16 @@ def init_db():
     """)
     
     # Safe migration for existing databases
-    try:
-        cursor.execute("ALTER TABLE reminders ADD COLUMN prompt_hint TEXT DEFAULT ''")
-    except Exception:
-        pass
+    for col, col_type, default_val in [
+        ("prompt_hint", "TEXT", "''"),
+        ("target_platform", "TEXT", "'all'"),
+        ("target_channel_id", "TEXT", "''"),
+        ("target_user_id", "TEXT", "''")
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE reminders ADD COLUMN {col} {col_type} DEFAULT {default_val}")
+        except Exception:
+            pass
     
     # Set default profile values if empty
     defaults = {
@@ -92,6 +98,7 @@ def init_db():
         "proactive_frequency": "normal", # 'high', 'normal', 'low', 'off'
         "discord_bot_token": "",
         "discord_user_id": "",
+        "user_timezone": "Asia/Kolkata",
         "last_active_date": datetime.now().strftime("%Y-%m-%d")
     }
     
@@ -314,7 +321,7 @@ def update_joi_state(mood=None, inner_thought=None, bond_delta=0):
     conn.close()
 
 # Reminders & Scheduled Check-ins methods
-def add_scheduled_reminder(note, scheduled_time, context="", prompt_hint=""):
+def add_scheduled_reminder(note, scheduled_time, context="", prompt_hint="", target_platform="all", target_channel_id="", target_user_id=""):
     """
     Schedules an autonomous check-in or reminder for a specific timestamp.
     scheduled_time can be datetime or string 'YYYY-MM-DD HH:MM:SS'.
@@ -327,9 +334,9 @@ def add_scheduled_reminder(note, scheduled_time, context="", prompt_hint=""):
         sched_str = str(scheduled_time)
         
     cursor.execute("""
-        INSERT INTO reminders (note, scheduled_time, context, prompt_hint, is_done, created_at)
-        VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
-    """, (note, sched_str, context, prompt_hint))
+        INSERT INTO reminders (note, scheduled_time, context, prompt_hint, target_platform, target_channel_id, target_user_id, is_done, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+    """, (note, sched_str, context, prompt_hint, str(target_platform or "all"), str(target_channel_id or ""), str(target_user_id or "")))
     conn.commit()
     r_id = cursor.lastrowid
     conn.close()
@@ -339,15 +346,27 @@ def add_reminder(note, scheduled_time=None, context=""):
     """Backwards compatible alias for add_scheduled_reminder."""
     return add_scheduled_reminder(note, scheduled_time or datetime.now(), context=context)
 
-def get_due_scheduled_reminders():
+def get_due_scheduled_reminders(now_dt=None):
     """
-    Returns all pending scheduled reach-outs whose scheduled_time <= current time.
+    Returns all pending scheduled reach-outs whose scheduled_time <= current time
+    in the user's local timezone.
     """
     conn = get_connection()
     cursor = conn.cursor()
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if now_dt is None:
+        try:
+            import time_parser
+            now_dt = time_parser.get_user_now()
+            now_str = now_dt.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    elif isinstance(now_dt, datetime):
+        now_str = now_dt.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        now_str = str(now_dt)
+        
     cursor.execute("""
-        SELECT id, note, scheduled_time, context, prompt_hint
+        SELECT id, note, scheduled_time, context, prompt_hint, target_platform, target_channel_id, target_user_id
         FROM reminders
         WHERE is_done = 0 AND (scheduled_time IS NULL OR scheduled_time <= ?)
         ORDER BY scheduled_time ASC
@@ -365,7 +384,7 @@ def get_upcoming_reminders():
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT id, note, scheduled_time, context, prompt_hint, created_at
+        SELECT id, note, scheduled_time, context, prompt_hint, target_platform, target_channel_id, target_user_id, created_at
         FROM reminders
         WHERE is_done = 0
         ORDER BY scheduled_time ASC

@@ -6,6 +6,7 @@ import random
 import subprocess
 from datetime import datetime, timedelta
 import memory
+import time_parser
 
 try:
     import discord_companion
@@ -66,7 +67,7 @@ def execute_scheduled_reachout(reminder):
     user_gender = profile.get("user_gender", "male")
     note = reminder.get("note", "checking in as promised")
     prompt_hint = reminder.get("prompt_hint", "")
-    now = datetime.now()
+    now = time_parser.get_user_now()
     time_str = now.strftime("%I:%M %p").lstrip("0")
     
     # Try generating with LLM if available for dynamic natural speech
@@ -158,9 +159,20 @@ Return ONLY JSON:
     notification_body = " ".join(bubbles)
     trigger_desktop_notification(f"Joi ✨ ({time_str})", notification_body)
     
-    # Trigger Discord DM if configured
-    if discord_companion:
-        threading.Thread(target=discord_companion.send_proactive_dm, args=(bubbles,), daemon=True).start()
+    # Trigger Discord message if configured and target platform includes discord
+    target_platform = reminder.get("target_platform", "all")
+    target_channel_id = reminder.get("target_channel_id", "")
+    target_user_id = reminder.get("target_user_id", "")
+    if discord_companion and target_platform in ["discord", "all"]:
+        threading.Thread(
+            target=discord_companion.send_proactive_message,
+            kwargs={
+                "bubbles": bubbles,
+                "user_id": target_user_id,
+                "channel_id": target_channel_id
+            },
+            daemon=True
+        ).start()
     
     return payload
 
@@ -172,7 +184,7 @@ def generate_proactive_message(trigger_type="spontaneous"):
     user_name = profile.get("user_name", "Joe")
     user_nickname = profile.get("user_nickname", "sweetheart")
     user_gender = profile.get("user_gender", "male")
-    now = datetime.now()
+    now = time_parser.get_user_now()
     hour = now.hour
     
     pet_name = "handsome" if user_gender == "male" else user_nickname
@@ -241,9 +253,13 @@ def generate_proactive_message(trigger_type="spontaneous"):
     notification_body = " ".join(bubbles)
     trigger_desktop_notification(f"Joi ✨", notification_body)
     
-    # Trigger Discord DM if configured
+    # Trigger Discord message if configured
     if discord_companion:
-        threading.Thread(target=discord_companion.send_proactive_dm, args=(bubbles,), daemon=True).start()
+        threading.Thread(
+            target=discord_companion.send_proactive_message,
+            kwargs={"bubbles": bubbles},
+            daemon=True
+        ).start()
     
     return payload
 
@@ -264,7 +280,7 @@ def proactive_worker():
         try:
             time.sleep(5)
             tick += 1
-            now = datetime.now()
+            now = time_parser.get_user_now()
             
             # --- 1. SCHEDULED REACH-OUTS & REMINDERS (CHECK EVERY 5 SECONDS) ---
             # Never blocked by spontaneous cooldowns!

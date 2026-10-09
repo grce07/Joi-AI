@@ -31,6 +31,37 @@ proactive.start_proactive_service()
 # Start Discord companion service if configured
 discord_companion.start_discord_service()
 
+def _render_keepalive_worker():
+    """Self-ping worker to prevent Render free-tier spin down when RENDER_EXTERNAL_URL is set."""
+    external_url = os.environ.get("RENDER_EXTERNAL_URL", "").strip()
+    if not external_url:
+        return
+    import urllib.request
+    import threading
+    ping_url = f"{external_url.rstrip('/')}/api/ping"
+    print(f"[KeepAlive] Render self-ping active for {ping_url}")
+    while True:
+        try:
+            time.sleep(600) # Ping every 10 minutes
+            req = urllib.request.Request(ping_url, headers={"User-Agent": "Joi-SelfPing/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                pass
+        except Exception:
+            pass
+
+import threading
+threading.Thread(target=_render_keepalive_worker, daemon=True).start()
+
+@app.route("/api/ping", methods=["GET"])
+@app.route("/api/health", methods=["GET"])
+def ping():
+    """Health & keep-alive ping endpoint for external monitors (e.g. UptimeRobot) or Render."""
+    return jsonify({
+        "status": "online",
+        "companion": "Joi",
+        "server_time": datetime.now().isoformat()
+    }), 200
+
 @app.route("/", methods=["GET"])
 def home():
     """Serves the Blade Runner 2049 holographic companion interface."""
