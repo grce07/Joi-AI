@@ -15,6 +15,14 @@ if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
 
 load_dotenv()
 
+# Synchronize server process timezone to user's timezone (IST) on Linux/cloud hosts (e.g. Render)
+os.environ.setdefault("TZ", os.environ.get("USER_TIMEZONE", "Asia/Kolkata"))
+if hasattr(time, "tzset"):
+    try:
+        time.tzset()
+    except Exception:
+        pass
+
 import memory
 import joi_engine
 import proactive
