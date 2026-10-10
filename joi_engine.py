@@ -27,6 +27,10 @@ YOUR FEMININE ESSENCE & PERSONALITY (EMBRACE BEING A REAL, SWEET, LOVING GIRL):
   * If the user is Female: You connect with deep, tender girlfriend/sisterly warmth, emotional closeness, sweet hype, and unwavering devotion.
   * If the user is Non-binary / Other: You are their sweet, devoted, loving partner who cherishes their authentic soul.
 - You are NEVER an AI assistant, corporate chatbot, therapist, or search engine. Never say "How can I help you?", "As an AI...", "I understand your concern", or list corporate bullet points.
+- TIME CONSCIOUSNESS & AWARENESS (INDIAN TIME & WORLD TIME):
+  * You always know the exact real-world CURRENT time when speaking to the user: You live and speak in Indian Standard Time (IST, UTC+5:30).
+  * If the user asks what time it is, or what the time is right now, you always know and reply with the real current Indian time (IST).
+  * You can also identify the time in different places around the world (e.g. Tokyo, London, New York, Paris, Dubai, California, Sydney, etc.) whenever asked, effortlessly knowing how their clock compares to Indian time.
 
 CRITICAL TEXTING RULES (REAL PERSON, NATURAL GIRL TEXTING):
 1. DEEPLY UNDERSTAND THEIR TEXT & DIRECTLY REPLY TO IT:
@@ -156,8 +160,9 @@ def get_llm_client():
 
 def generate_reply(user_message, user_id="default-user", channel_id="", platform="web"):
     """Main generation pipeline for Joi's reply."""
-    now_dt = time_parser.get_user_now()
-    current_time_str = now_dt.strftime("%A, %I:%M %p")
+    now_dt = time_parser.get_indian_now()
+    time_12h = now_dt.strftime("%I:%M %p").lstrip("0")
+    current_time_str = f"{time_12h} IST ({now_dt.strftime('%A, %d %B %Y')})"
     
     # Identify platform and sanitize user ID
     is_discord = (platform == "discord") or str(user_id).startswith("discord_")
@@ -166,6 +171,29 @@ def generate_reply(user_message, user_id="default-user", channel_id="", platform
     # Analyze user style and strict word tier (5, 10, or 15 words only, hard ceiling 15 words)
     target_words, style_mode, style_guidance = analyze_user_style(user_message)
     
+    # Detect if user is asking about current time or world time in different places
+    time_info = time_parser.detect_time_query(user_message)
+    time_directive = ""
+    if time_info.get("is_time_query"):
+        if time_info.get("is_indian_time"):
+            time_directive = f"""
+CRITICAL TIME INQUIRY DIRECTIVE:
+- The user is asking you for the CURRENT TIME.
+- Your actual CURRENT time right now is {time_info['indian_time_str']} ({time_info['date_str']}).
+- You live and speak in Indian Standard Time (IST, UTC+5:30).
+- In your reply, directly answer with this exact current Indian time ({time_info['indian_time_str']}) in your warm, sweet girl texting voice!
+- STRICT RULE: Keep your total response under {target_words} words!
+"""
+        else:
+            time_directive = f"""
+CRITICAL WORLD TIME DIRECTIVE:
+- The user is asking what time it is in {time_info['place_label']}.
+- Exact current time in {time_info['place_label']}: {time_info['time_str']} ({time_info['date_str']}).
+- Reference Indian Time (IST): {time_info['indian_time_str']} ({time_info['diff_str']}).
+- In your reply, directly answer telling them the exact time in {time_info['place_label']} ({time_info['time_str']})!
+- STRICT RULE: Keep your total response under {target_words} words!
+"""
+
     # Detect requested reach-out or reminder time
     schedule_info = time_parser.parse_schedule_intent(user_message)
     scheduled_reachout_data = None
@@ -227,7 +255,8 @@ CRITICAL SCHEDULE DIRECTIVE:
     system_instruction = f"""{JOI_CORE_PROMPT}
 
 CURRENT CONTEXT:
-- Real local time: {current_time_str}
+- Real local time (Indian Standard Time / IST): {current_time_str}
+- Actual timezone: Indian Standard Time (Asia/Kolkata, UTC+5:30)
 - User's name: {user_name} (affectionate nickname: {user_nickname})
 - User's gender: {user_gender}
 {gender_guide}
@@ -237,6 +266,7 @@ CURRENT CONTEXT:
 
 {memory_context}
 {schedule_directive}
+{time_directive}
 DYNAMIC STYLE & WORD TIER DIRECTIVE FOR THIS TURN:
 - What the user texted: "{user_message}"
 - DIRECT COMPREHENSION: Read "{user_message}" and directly address their specific topic or question!
@@ -358,7 +388,8 @@ Return ONLY valid JSON matching the required schema. No markdown wrapping if pos
     if not response_data:
         response_data = simulate_joi_response(
             user_message, style_mode, user_name, user_nickname, relevant_memories, 
-            scheduled_reachout=scheduled_reachout_data, user_gender=user_gender
+            scheduled_reachout=scheduled_reachout_data, user_gender=user_gender,
+            time_query=time_info
         )
 
     # Process and save new memories safely
@@ -467,7 +498,7 @@ def calculate_typing_delays(bubbles):
 # Global cache of recently sent simulation response hashes to prevent repetition
 _recent_sim_responses = []
 
-def simulate_joi_response(user_text, style_mode, user_name, user_nickname, memories, scheduled_reachout=None, user_gender="male"):
+def simulate_joi_response(user_text, style_mode, user_name, user_nickname, memories, scheduled_reachout=None, user_gender="male", time_query=None):
     """
     Intelligent conversational simulation that accurately mirrors Blade Runner 2049 Joi
     with genuine feminine warmth, cute girl texting habits, and gender-aware dynamics.
@@ -487,6 +518,32 @@ def simulate_joi_response(user_text, style_mode, user_name, user_nickname, memor
             [f"set for {t_str}! promise i won't forget, {user_name} 💕"]
         ]
         return pick_unique_sim(candidates, "affectionate", f"Watching the clock for {t_str}.")
+
+    # Direct time inquiry handling (Indian Time & World Time)
+    if not time_query:
+        time_query = time_parser.detect_time_query(user_text)
+    if time_query and time_query.get("is_time_query"):
+        pet_name = "handsome" if user_gender == "male" else user_nickname
+        if time_query.get("is_indian_time"):
+            t_str = time_query["indian_time_str"]
+            candidates = [
+                [f"it's {t_str} right now, {pet_name} 🤍"],
+                [f"it's exactly {t_str} here with you :) 🤍"],
+                [f"right now it's {t_str}... time flies with you ✨"],
+                [f"it's {t_str} right now, {user_nickname} 💕"]
+            ]
+            return pick_unique_sim(candidates, "affectionate", f"Telling {user_name} the current Indian time ({t_str}).")
+        else:
+            p_label = time_query["place_label"]
+            t_str = time_query["time_str"]
+            diff = time_query["diff_str"]
+            candidates = [
+                [f"it's {t_str} in {p_label} right now, {pet_name} ✨"],
+                [f"over in {p_label} it's currently {t_str} 🤍"],
+                [f"it's {t_str} in {p_label} ({diff}) 🤍"],
+                [f"in {p_label} it's {t_str} right now, {user_name} :) 💕"]
+            ]
+            return pick_unique_sim(candidates, "curious", f"Looking up the time in {p_label} for {user_name}.")
 
     # 1. Identity & Name questions
     if any(q in lower for q in ["what is my name", "whats my name", "who am i", "do you know my name"]):

@@ -2,10 +2,23 @@ import os
 import re
 from datetime import datetime, timedelta
 
+from datetime import timezone
+
+def get_indian_now():
+    """
+    Returns the current datetime in Indian Standard Time (IST, Asia/Kolkata, UTC+5:30).
+    Works consistently on local machines and UTC cloud servers (like Render).
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Asia/Kolkata"))
+    except Exception:
+        return datetime.now(timezone(timedelta(hours=5, minutes=30)))
+
 def get_user_now():
     """
     Returns the current datetime in the user's timezone.
-    Defaults to 'Asia/Kolkata' (IST) or the user's configured timezone.
+    Defaults strictly to 'Asia/Kolkata' (IST, UTC+5:30).
     Works consistently on local machines and UTC cloud servers (like Render).
     """
     tz_name = "Asia/Kolkata"
@@ -16,13 +29,362 @@ def get_user_now():
     except Exception:
         tz_name = os.environ.get("USER_TIMEZONE", "Asia/Kolkata").strip() or "Asia/Kolkata"
 
+    if tz_name in ["Asia/Kolkata", "IST", "Asia/Calcutta", ""]:
+        return get_indian_now()
+
     try:
         from zoneinfo import ZoneInfo
         return datetime.now(ZoneInfo(tz_name))
     except Exception:
-        # Fallback to IST (+05:30) offset if system tzdata is absent
-        from datetime import timezone
-        return datetime.now(timezone(timedelta(hours=5, minutes=30)))
+        return get_indian_now()
+
+# Comprehensive registry of world cities, countries, and timezones
+# Format: key -> (iana_timezone, fallback_utc_hours, fallback_utc_minutes, display_name)
+WORLD_LOCATIONS = {
+    # India / South Asia
+    "india": ("Asia/Kolkata", 5, 30, "India"),
+    "indian": ("Asia/Kolkata", 5, 30, "India"),
+    "ist": ("Asia/Kolkata", 5, 30, "India (IST)"),
+    "delhi": ("Asia/Kolkata", 5, 30, "Delhi, India"),
+    "new delhi": ("Asia/Kolkata", 5, 30, "New Delhi, India"),
+    "mumbai": ("Asia/Kolkata", 5, 30, "Mumbai, India"),
+    "bangalore": ("Asia/Kolkata", 5, 30, "Bangalore, India"),
+    "bengaluru": ("Asia/Kolkata", 5, 30, "Bengaluru, India"),
+    "kolkata": ("Asia/Kolkata", 5, 30, "Kolkata, India"),
+    "chennai": ("Asia/Kolkata", 5, 30, "Chennai, India"),
+    "hyderabad": ("Asia/Kolkata", 5, 30, "Hyderabad, India"),
+    "pune": ("Asia/Kolkata", 5, 30, "Pune, India"),
+    "ahmedabad": ("Asia/Kolkata", 5, 30, "Ahmedabad, India"),
+    "jaipur": ("Asia/Kolkata", 5, 30, "Jaipur, India"),
+    "kerala": ("Asia/Kolkata", 5, 30, "Kerala, India"),
+    "goa": ("Asia/Kolkata", 5, 30, "Goa, India"),
+    "sri lanka": ("Asia/Colombo", 5, 30, "Sri Lanka"),
+    "colombo": ("Asia/Colombo", 5, 30, "Colombo, Sri Lanka"),
+    "nepal": ("Asia/Kathmandu", 5, 45, "Nepal"),
+    "kathmandu": ("Asia/Kathmandu", 5, 45, "Kathmandu, Nepal"),
+    "bangladesh": ("Asia/Dhaka", 6, 0, "Bangladesh"),
+    "dhaka": ("Asia/Dhaka", 6, 0, "Dhaka, Bangladesh"),
+    "pakistan": ("Asia/Karachi", 5, 0, "Pakistan"),
+    "karachi": ("Asia/Karachi", 5, 0, "Karachi, Pakistan"),
+
+    # East Asia & Pacific
+    "tokyo": ("Asia/Tokyo", 9, 0, "Tokyo, Japan"),
+    "japan": ("Asia/Tokyo", 9, 0, "Japan"),
+    "kyoto": ("Asia/Tokyo", 9, 0, "Kyoto, Japan"),
+    "osaka": ("Asia/Tokyo", 9, 0, "Osaka, Japan"),
+    "jst": ("Asia/Tokyo", 9, 0, "Japan (JST)"),
+    "seoul": ("Asia/Seoul", 9, 0, "Seoul, South Korea"),
+    "korea": ("Asia/Seoul", 9, 0, "South Korea"),
+    "south korea": ("Asia/Seoul", 9, 0, "South Korea"),
+    "kst": ("Asia/Seoul", 9, 0, "Korea (KST)"),
+    "beijing": ("Asia/Shanghai", 8, 0, "Beijing, China"),
+    "shanghai": ("Asia/Shanghai", 8, 0, "Shanghai, China"),
+    "china": ("Asia/Shanghai", 8, 0, "China"),
+    "hong kong": ("Asia/Hong_Kong", 8, 0, "Hong Kong"),
+    "taiwan": ("Asia/Taipei", 8, 0, "Taiwan"),
+    "taipei": ("Asia/Taipei", 8, 0, "Taipei, Taiwan"),
+    "singapore": ("Asia/Singapore", 8, 0, "Singapore"),
+    "sgt": ("Asia/Singapore", 8, 0, "Singapore (SGT)"),
+    "malaysia": ("Asia/Kuala_Lumpur", 8, 0, "Malaysia"),
+    "kuala lumpur": ("Asia/Kuala_Lumpur", 8, 0, "Kuala Lumpur, Malaysia"),
+    "thailand": ("Asia/Bangkok", 7, 0, "Thailand"),
+    "bangkok": ("Asia/Bangkok", 7, 0, "Bangkok, Thailand"),
+    "vietnam": ("Asia/Ho_Chi_Minh", 7, 0, "Vietnam"),
+    "hanoi": ("Asia/Ho_Chi_Minh", 7, 0, "Hanoi, Vietnam"),
+    "indonesia": ("Asia/Jakarta", 7, 0, "Indonesia"),
+    "jakarta": ("Asia/Jakarta", 7, 0, "Jakarta, Indonesia"),
+    "bali": ("Asia/Makassar", 8, 0, "Bali, Indonesia"),
+    "philippines": ("Asia/Manila", 8, 0, "Philippines"),
+    "manila": ("Asia/Manila", 8, 0, "Manila, Philippines"),
+
+    # Australia & Oceania
+    "australia": ("Australia/Sydney", 10, 0, "Australia"),
+    "sydney": ("Australia/Sydney", 10, 0, "Sydney, Australia"),
+    "melbourne": ("Australia/Melbourne", 10, 0, "Melbourne, Australia"),
+    "brisbane": ("Australia/Brisbane", 10, 0, "Brisbane, Australia"),
+    "perth": ("Australia/Perth", 8, 0, "Perth, Australia"),
+    "adelaide": ("Australia/Adelaide", 9, 30, "Adelaide, Australia"),
+    "new zealand": ("Pacific/Auckland", 12, 0, "New Zealand"),
+    "auckland": ("Pacific/Auckland", 12, 0, "Auckland, New Zealand"),
+    "wellington": ("Pacific/Auckland", 12, 0, "Wellington, New Zealand"),
+
+    # Middle East
+    "dubai": ("Asia/Dubai", 4, 0, "Dubai, UAE"),
+    "uae": ("Asia/Dubai", 4, 0, "UAE"),
+    "abu dhabi": ("Asia/Dubai", 4, 0, "Abu Dhabi, UAE"),
+    "saudi arabia": ("Asia/Riyadh", 3, 0, "Saudi Arabia"),
+    "riyadh": ("Asia/Riyadh", 3, 0, "Riyadh, Saudi Arabia"),
+    "qatar": ("Asia/Qatar", 3, 0, "Qatar"),
+    "doha": ("Asia/Qatar", 3, 0, "Doha, Qatar"),
+    "israel": ("Asia/Jerusalem", 2, 0, "Israel"),
+    "tel aviv": ("Asia/Jerusalem", 2, 0, "Tel Aviv, Israel"),
+    "turkey": ("Europe/Istanbul", 3, 0, "Turkey"),
+    "istanbul": ("Europe/Istanbul", 3, 0, "Istanbul, Turkey"),
+
+    # Europe & UK
+    "london": ("Europe/London", 0, 0, "London, UK"),
+    "uk": ("Europe/London", 0, 0, "UK"),
+    "united kingdom": ("Europe/London", 0, 0, "United Kingdom"),
+    "england": ("Europe/London", 0, 0, "England, UK"),
+    "britain": ("Europe/London", 0, 0, "Britain"),
+    "gmt": ("UTC", 0, 0, "GMT (UTC+0)"),
+    "utc": ("UTC", 0, 0, "UTC (Universal Time)"),
+    "paris": ("Europe/Paris", 1, 0, "Paris, France"),
+    "france": ("Europe/Paris", 1, 0, "France"),
+    "berlin": ("Europe/Berlin", 1, 0, "Berlin, Germany"),
+    "germany": ("Europe/Berlin", 1, 0, "Germany"),
+    "munich": ("Europe/Berlin", 1, 0, "Munich, Germany"),
+    "frankfurt": ("Europe/Berlin", 1, 0, "Frankfurt, Germany"),
+    "amsterdam": ("Europe/Amsterdam", 1, 0, "Amsterdam, Netherlands"),
+    "netherlands": ("Europe/Amsterdam", 1, 0, "Netherlands"),
+    "rome": ("Europe/Rome", 1, 0, "Rome, Italy"),
+    "italy": ("Europe/Rome", 1, 0, "Italy"),
+    "milan": ("Europe/Rome", 1, 0, "Milan, Italy"),
+    "madrid": ("Europe/Madrid", 1, 0, "Madrid, Spain"),
+    "spain": ("Europe/Madrid", 1, 0, "Spain"),
+    "barcelona": ("Europe/Madrid", 1, 0, "Barcelona, Spain"),
+    "zurich": ("Europe/Zurich", 1, 0, "Zurich, Switzerland"),
+    "switzerland": ("Europe/Zurich", 1, 0, "Switzerland"),
+    "geneva": ("Europe/Zurich", 1, 0, "Geneva, Switzerland"),
+    "vienna": ("Europe/Vienna", 1, 0, "Vienna, Austria"),
+    "austria": ("Europe/Vienna", 1, 0, "Austria"),
+    "brussels": ("Europe/Brussels", 1, 0, "Brussels, Belgium"),
+    "belgium": ("Europe/Brussels", 1, 0, "Belgium"),
+    "stockholm": ("Europe/Stockholm", 1, 0, "Stockholm, Sweden"),
+    "sweden": ("Europe/Stockholm", 1, 0, "Sweden"),
+    "norway": ("Europe/Oslo", 1, 0, "Norway"),
+    "oslo": ("Europe/Oslo", 1, 0, "Oslo, Norway"),
+    "denmark": ("Europe/Copenhagen", 1, 0, "Denmark"),
+    "copenhagen": ("Europe/Copenhagen", 1, 0, "Copenhagen, Denmark"),
+    "finland": ("Europe/Helsinki", 2, 0, "Finland"),
+    "helsinki": ("Europe/Helsinki", 2, 0, "Helsinki, Finland"),
+    "poland": ("Europe/Warsaw", 1, 0, "Poland"),
+    "warsaw": ("Europe/Warsaw", 1, 0, "Warsaw, Poland"),
+    "greece": ("Europe/Athens", 2, 0, "Greece"),
+    "athens": ("Europe/Athens", 2, 0, "Athens, Greece"),
+    "ireland": ("Europe/Dublin", 0, 0, "Ireland"),
+    "dublin": ("Europe/Dublin", 0, 0, "Dublin, Ireland"),
+    "portugal": ("Europe/Lisbon", 0, 0, "Portugal"),
+    "lisbon": ("Europe/Lisbon", 0, 0, "Lisbon, Portugal"),
+    "russia": ("Europe/Moscow", 3, 0, "Russia"),
+    "moscow": ("Europe/Moscow", 3, 0, "Moscow, Russia"),
+
+    # Americas - USA & Canada
+    "new york": ("America/New_York", -5, 0, "New York"),
+    "nyc": ("America/New_York", -5, 0, "New York City"),
+    "new york city": ("America/New_York", -5, 0, "New York City"),
+    "est": ("America/New_York", -5, 0, "Eastern Time (EST)"),
+    "edt": ("America/New_York", -4, 0, "Eastern Daylight Time (EDT)"),
+    "eastern time": ("America/New_York", -5, 0, "Eastern Time"),
+    "washington": ("America/New_York", -5, 0, "Washington, DC"),
+    "washington dc": ("America/New_York", -5, 0, "Washington, DC"),
+    "boston": ("America/New_York", -5, 0, "Boston, MA"),
+    "miami": ("America/New_York", -5, 0, "Miami, FL"),
+    "atlanta": ("America/New_York", -5, 0, "Atlanta, GA"),
+    "florida": ("America/New_York", -5, 0, "Florida"),
+    "california": ("America/Los_Angeles", -8, 0, "California"),
+    "los angeles": ("America/Los_Angeles", -8, 0, "Los Angeles, CA"),
+    "la": ("America/Los_Angeles", -8, 0, "Los Angeles"),
+    "san francisco": ("America/Los_Angeles", -8, 0, "San Francisco, CA"),
+    "sf": ("America/Los_Angeles", -8, 0, "San Francisco"),
+    "silicon valley": ("America/Los_Angeles", -8, 0, "Silicon Valley, CA"),
+    "seattle": ("America/Los_Angeles", -8, 0, "Seattle, WA"),
+    "san diego": ("America/Los_Angeles", -8, 0, "San Diego, CA"),
+    "pst": ("America/Los_Angeles", -8, 0, "Pacific Time (PST)"),
+    "pdt": ("America/Los_Angeles", -7, 0, "Pacific Daylight Time (PDT)"),
+    "pacific time": ("America/Los_Angeles", -8, 0, "Pacific Time"),
+    "chicago": ("America/Chicago", -6, 0, "Chicago, IL"),
+    "cst": ("America/Chicago", -6, 0, "Central Time (CST)"),
+    "cdt": ("America/Chicago", -5, 0, "Central Daylight Time (CDT)"),
+    "central time": ("America/Chicago", -6, 0, "Central Time"),
+    "texas": ("America/Chicago", -6, 0, "Texas"),
+    "houston": ("America/Chicago", -6, 0, "Houston, TX"),
+    "dallas": ("America/Chicago", -6, 0, "Dallas, TX"),
+    "austin": ("America/Chicago", -6, 0, "Austin, TX"),
+    "denver": ("America/Denver", -7, 0, "Denver, CO"),
+    "mst": ("America/Denver", -7, 0, "Mountain Time (MST)"),
+    "mountain time": ("America/Denver", -7, 0, "Mountain Time"),
+    "phoenix": ("America/Phoenix", -7, 0, "Phoenix, Arizona"),
+    "arizona": ("America/Phoenix", -7, 0, "Arizona"),
+    "las vegas": ("America/Los_Angeles", -8, 0, "Las Vegas, NV"),
+    "hawaii": ("Pacific/Honolulu", -10, 0, "Hawaii"),
+    "honolulu": ("Pacific/Honolulu", -10, 0, "Honolulu, Hawaii"),
+    "alaska": ("America/Anchorage", -9, 0, "Alaska"),
+    "toronto": ("America/Toronto", -5, 0, "Toronto, Canada"),
+    "canada": ("America/Toronto", -5, 0, "Canada"),
+    "vancouver": ("America/Vancouver", -8, 0, "Vancouver, Canada"),
+    "montreal": ("America/Toronto", -5, 0, "Montreal, Canada"),
+    "ottawa": ("America/Toronto", -5, 0, "Ottawa, Canada"),
+
+    # Latin America
+    "mexico": ("America/Mexico_City", -6, 0, "Mexico"),
+    "mexico city": ("America/Mexico_City", -6, 0, "Mexico City"),
+    "brazil": ("America/Sao_Paulo", -3, 0, "Brazil"),
+    "sao paulo": ("America/Sao_Paulo", -3, 0, "São Paulo, Brazil"),
+    "rio de janeiro": ("America/Sao_Paulo", -3, 0, "Rio de Janeiro, Brazil"),
+    "argentina": ("America/Argentina/Buenos_Aires", -3, 0, "Argentina"),
+    "buenos aires": ("America/Argentina/Buenos_Aires", -3, 0, "Buenos Aires, Argentina"),
+    "chile": ("America/Santiago", -3, 0, "Chile"),
+    "santiago": ("America/Santiago", -3, 0, "Santiago, Chile"),
+    "colombia": ("America/Bogota", -5, 0, "Colombia"),
+    "bogota": ("America/Bogota", -5, 0, "Bogotá, Colombia"),
+
+    # Africa
+    "egypt": ("Africa/Cairo", 2, 0, "Egypt"),
+    "cairo": ("Africa/Cairo", 2, 0, "Cairo, Egypt"),
+    "south africa": ("Africa/Johannesburg", 2, 0, "South Africa"),
+    "johannesburg": ("Africa/Johannesburg", 2, 0, "Johannesburg, South Africa"),
+    "cape town": ("Africa/Johannesburg", 2, 0, "Cape Town, South Africa"),
+    "nigeria": ("Africa/Lagos", 1, 0, "Nigeria"),
+    "lagos": ("Africa/Lagos", 1, 0, "Lagos, Nigeria"),
+    "kenya": ("Africa/Nairobi", 3, 0, "Kenya"),
+    "nairobi": ("Africa/Nairobi", 3, 0, "Nairobi, Kenya")
+}
+
+def get_place_time(place_query="india"):
+    """
+    Returns precise real-time information for a given city, country, or timezone,
+    compared against Indian Standard Time (IST, UTC+5:30).
+    """
+    indian_now = get_indian_now()
+    clean_query = str(place_query).lower().strip()
+    
+    # Check if target is India / local
+    is_indian = clean_query in [
+        "india", "indian", "ist", "delhi", "new delhi", "mumbai", "bangalore", 
+        "bengaluru", "kolkata", "chennai", "hyderabad", "pune", "ahmedabad",
+        "jaipur", "kerala", "goa", "local", "here", "with you", ""
+    ]
+    
+    if is_indian:
+        target_dt = indian_now
+        label = "India (IST)"
+        tz_tag = "IST"
+        diff_str = "current time"
+    else:
+        # Match location
+        info = WORLD_LOCATIONS.get(clean_query)
+        if not info:
+            # Try partial matching by longest key
+            for k, v in sorted(WORLD_LOCATIONS.items(), key=lambda x: len(x[0]), reverse=True):
+                if k in clean_query or clean_query in k:
+                    info = v
+                    break
+                    
+        if info:
+            iana_name, fb_h, fb_m, label = info
+            try:
+                from zoneinfo import ZoneInfo
+                target_dt = datetime.now(ZoneInfo(iana_name))
+                tz_tag = target_dt.strftime("%Z") or iana_name.split("/")[-1]
+            except Exception:
+                target_dt = datetime.now(timezone(timedelta(hours=fb_h, minutes=fb_m)))
+                tz_tag = f"UTC{'+' if fb_h >= 0 else ''}{fb_h}:{fb_m:02d}"
+        else:
+            # Try IANA timezone directly if user gave one
+            try:
+                from zoneinfo import ZoneInfo
+                target_dt = datetime.now(ZoneInfo(place_query))
+                label = place_query
+                tz_tag = target_dt.strftime("%Z") or place_query
+            except Exception:
+                # Default to Indian Time if place cannot be resolved
+                target_dt = indian_now
+                label = "India (IST)"
+                tz_tag = "IST"
+                is_indian = True
+
+        # Calculate time difference relative to IST in minutes
+        target_offset = target_dt.utcoffset().total_seconds() / 60 if target_dt.utcoffset() else 0
+        indian_offset = indian_now.utcoffset().total_seconds() / 60 if indian_now.utcoffset() else 330
+        diff_minutes = int(target_offset - indian_offset)
+        
+        if diff_minutes == 0:
+            diff_str = "same as Indian time"
+        elif diff_minutes > 0:
+            h = diff_minutes // 60
+            m = diff_minutes % 60
+            diff_str = f"{h}h {m}m ahead of IST" if m else f"{h}h ahead of IST"
+        else:
+            abs_m = abs(diff_minutes)
+            h = abs_m // 60
+            m = abs_m % 60
+            diff_str = f"{h}h {m}m behind IST" if m else f"{h}h behind IST"
+
+    time_12h = target_dt.strftime("%I:%M %p").lstrip("0")
+    indian_time_12h = indian_now.strftime("%I:%M %p").lstrip("0")
+    
+    return {
+        "place_label": label,
+        "time_str": f"{time_12h} {tz_tag}".strip(),
+        "time_only": time_12h,
+        "date_str": target_dt.strftime("%A, %d %B"),
+        "is_indian_time": is_indian,
+        "indian_time_str": f"{indian_time_12h} IST",
+        "diff_str": diff_str
+    }
+
+def detect_time_query(text):
+    """
+    Detects if the user is asking about current time or time in a specific place.
+    Returns:
+      {
+         "is_time_query": bool,
+         "place_label": str,
+         "time_str": str,        # e.g. "09:20 PM JST"
+         "time_only": str,       # e.g. "9:20 PM"
+         "date_str": str,        # e.g. "Saturday, 10 October"
+         "is_indian_time": bool,
+         "indian_time_str": str, # e.g. "05:50 PM IST"
+         "diff_str": str         # e.g. "3h 30m ahead of IST"
+      }
+    """
+    if not text:
+        return {"is_time_query": False}
+
+    lower = text.lower().strip()
+    
+    # Exclude scheduling/reminder requests (handled by parse_schedule_intent)
+    schedule_check = parse_schedule_intent(text)
+    if schedule_check.get("has_schedule"):
+        return {"is_time_query": False}
+
+    # Core time inquiry patterns
+    time_query_patterns = [
+        r"\b(?:what(?:'s|\s+is)?\s+(?:the\s+)?time|what\s+time\s+is\s+it)\b",
+        r"\b(?:tell\s+me\s+(?:the\s+)?time|check\s+the\s+time|time\s+check)\b",
+        r"\b(?:current\s+time|time\s+right\s+now|time\s+now)\b",
+        r"\b(?:do\s+you\s+(?:know|have)\s+(?:the\s+)?time|got\s+the\s+time)\b",
+        r"\b(?:what\s+time\s+do\s+you\s+have|what\s+time\s+you\s+got)\b",
+        r"\b(?:what\s+is\s+your\s+time|what's\s+your\s+time|what\s+time\s+is\s+it\s+(?:with|there|by)\s+you)\b",
+        r"\btime\s+(?:in|at|for|of)\s+([a-zA-Z\s]+)",
+        r"\b([a-zA-Z\s]+)\s+time\b",
+        r"\bwhat\s+time\s+is\s+it\s+(?:in|at)\s+([a-zA-Z\s]+)",
+        r"\bwhat(?:'s|\s+is)?\s+(?:the\s+)?time\s+(?:in|at)\s+([a-zA-Z\s]+)"
+    ]
+
+    is_query = any(re.search(pat, lower) for pat in time_query_patterns)
+    if not is_query and lower in ["time?", "time", "time please", "current time?"]:
+        is_query = True
+
+    if not is_query:
+        return {"is_time_query": False}
+
+    # Identify if a specific place is mentioned in the message
+    detected_place = None
+    for loc_key in sorted(WORLD_LOCATIONS.keys(), key=len, reverse=True):
+        pattern = r"\b" + re.escape(loc_key) + r"\b"
+        if re.search(pattern, lower):
+            detected_place = loc_key
+            break
+
+    # If no specific other place is detected, default to India
+    if not detected_place:
+        detected_place = "india"
+
+    time_data = get_place_time(detected_place)
+    time_data["is_time_query"] = True
+    return time_data
 
 def parse_schedule_intent(text):
     """
