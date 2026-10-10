@@ -82,7 +82,8 @@ def create_bot():
                         clean_text,
                         user_id=author_id_str,
                         channel_id=channel_id_str,
-                        platform="discord"
+                        platform="discord",
+                        client_time=message.created_at
                     )
                     bubbles = reply_packet.get("bubbles", ["heyy... i'm right here :)"])
                 except Exception as e:

@@ -300,14 +300,14 @@ def proactive_worker():
             due_reminders = memory.get_due_scheduled_reminders()
             if due_reminders:
                 for rem in due_reminders:
-                    # If reminder was due more than 2 hours ago (e.g. from previous days/sessions),
-                    # quietly mark as done to prevent spamming the user's Discord
+                    # If reminder was due more than 12 hours ago (e.g. from long-past sessions),
+                    # quietly mark as done to prevent spamming
                     sched_time_str = rem.get("scheduled_time", "")
                     if sched_time_str:
                         try:
                             s_dt = datetime.strptime(str(sched_time_str)[:19], "%Y-%m-%d %H:%M:%S")
                             now_naive = now.replace(tzinfo=None) if hasattr(now, 'tzinfo') and now.tzinfo else now
-                            if (now_naive - s_dt).total_seconds() > 7200:
+                            if (now_naive - s_dt).total_seconds() > 43200:
                                 memory.mark_reminder_done(rem["id"])
                                 continue
                         except Exception:

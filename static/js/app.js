@@ -213,7 +213,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: cleanText })
+                body: JSON.stringify({ 
+                    message: cleanText,
+                    client_time: new Date().toISOString(),
+                    client_tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata'
+                })
             });
             const data = await res.json();
 
@@ -663,8 +667,22 @@ document.addEventListener('DOMContentLoaded', () => {
         alert("✨ Joi's settings have been saved!");
     });
 
+    function startKeepAliveHeartbeat() {
+        // Pings every 3 minutes with client time to prevent server sleep and keep clock synced
+        setInterval(() => {
+            try {
+                const nowIso = new Date().toISOString();
+                fetch(`/api/ping?client_time=${encodeURIComponent(nowIso)}`, {
+                    method: 'GET',
+                    cache: 'no-store'
+                }).catch(() => {});
+            } catch (e) {}
+        }, 180000);
+    }
+
     // Init
     checkNotificationPermission();
     loadInitialData();
     setupSSE();
+    startKeepAliveHeartbeat();
 });

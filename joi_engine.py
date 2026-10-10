@@ -158,8 +158,11 @@ def get_llm_client():
     
     return provider, api_key, model_name
 
-def generate_reply(user_message, user_id="default-user", channel_id="", platform="web"):
+def generate_reply(user_message, user_id="default-user", channel_id="", platform="web", client_time=None):
     """Main generation pipeline for Joi's reply."""
+    if client_time:
+        time_parser.sync_time_from_client(client_time)
+
     now_dt = time_parser.get_indian_now()
     time_12h = now_dt.strftime("%I:%M %p").lstrip("0")
     current_time_str = f"{time_12h} IST ({now_dt.strftime('%A, %d %B %Y')})"

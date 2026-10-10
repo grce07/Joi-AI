@@ -56,33 +56,54 @@ proactive.start_proactive_service()
 discord_companion.start_discord_service()
 
 def _render_keepalive_worker():
-    """Self-ping worker to prevent Render free-tier spin down when RENDER_EXTERNAL_URL is set."""
-    external_url = os.environ.get("RENDER_EXTERNAL_URL", "").strip()
-    if not external_url:
-        return
+    """Self-ping worker to prevent Render free-tier spin down when public URL is known."""
     import urllib.request
     import threading
-    ping_url = f"{external_url.rstrip('/')}/api/ping"
-    print(f"[KeepAlive] Render self-ping active for {ping_url}")
     while True:
         try:
-            time.sleep(600) # Ping every 10 minutes
-            req = urllib.request.Request(ping_url, headers={"User-Agent": "Joi-SelfPing/1.0"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                pass
+            time.sleep(300) # Ping every 5 minutes (Render sleep timeout is 15 minutes)
+            external_url = os.environ.get("RENDER_EXTERNAL_URL", "").strip()
+            if not external_url:
+                try:
+                    prof = memory.get_user_profile()
+                    external_url = prof.get("active_external_url", "").strip()
+                except Exception:
+                    pass
+            if external_url:
+                ping_url = f"{external_url.rstrip('/')}/api/ping"
+                req = urllib.request.Request(ping_url, headers={"User-Agent": "Joi-SelfPing/1.0"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    pass
         except Exception:
             pass
 
 import threading
 threading.Thread(target=_render_keepalive_worker, daemon=True).start()
 
-@app.route("/api/ping", methods=["GET"])
-@app.route("/api/health", methods=["GET"])
+@app.route("/api/ping", methods=["GET", "POST"])
+@app.route("/api/health", methods=["GET", "POST"])
 def ping():
-    """Health & keep-alive ping endpoint for external monitors (e.g. UptimeRobot) or Render."""
+    """Health & keep-alive ping endpoint for external monitors (e.g. UptimeRobot), Render, and Web UI."""
+    client_time = request.args.get("client_time") or (request.get_json(silent=True) or {}).get("client_time")
+    if client_time:
+        time_parser.sync_time_from_client(client_time)
+
+    # Auto-detect public URL from incoming request to keep worker self-pinging
+    try:
+        host_url = request.host_url.rstrip("/")
+        if host_url and not any(h in host_url for h in ["127.0.0.1", "localhost", "0.0.0.0"]):
+            if not os.environ.get("RENDER_EXTERNAL_URL"):
+                os.environ["RENDER_EXTERNAL_URL"] = host_url
+                memory.set_user_profile("active_external_url", host_url)
+    except Exception:
+        pass
+
+    now_ist = time_parser.get_indian_now()
     return jsonify({
         "status": "online",
         "companion": "Joi",
+        "current_indian_time": now_ist.strftime("%A, %I:%M:%S %p IST"),
+        "time_drift_offset_sec": getattr(time_parser, "_time_drift_offset_seconds", 0.0),
         "server_time": datetime.now().isoformat()
     }), 200
 
@@ -99,12 +120,29 @@ def chat():
     user_id = data.get("user_id", "default-user")
     channel_id = str(data.get("channel_id", "")).strip()
     platform = str(data.get("platform", "web")).strip()
+    client_time = data.get("client_time")
+    
+    # Auto-detect public URL from request host to ensure keepalive stays active
+    try:
+        host_url = request.host_url.rstrip("/")
+        if host_url and not any(h in host_url for h in ["127.0.0.1", "localhost", "0.0.0.0"]):
+            if not os.environ.get("RENDER_EXTERNAL_URL"):
+                os.environ["RENDER_EXTERNAL_URL"] = host_url
+                memory.set_user_profile("active_external_url", host_url)
+    except Exception:
+        pass
     
     if not user_message:
         return jsonify({"error": "Empty message"}), 400
         
     try:
-        reply_packet = joi_engine.generate_reply(user_message, user_id=user_id, channel_id=channel_id, platform=platform)
+        reply_packet = joi_engine.generate_reply(
+            user_message, 
+            user_id=user_id, 
+            channel_id=channel_id, 
+            platform=platform,
+            client_time=client_time
+        )
         return jsonify(reply_packet)
     except Exception as e:
         print(f"[App] Chat processing error: {e}")

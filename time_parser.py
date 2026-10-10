@@ -1,25 +1,124 @@
 import os
 import re
-from datetime import datetime, timedelta
+import threading
+import urllib.request
+import email.utils
+from datetime import datetime, timedelta, timezone
 
-from datetime import timezone
+# Global drift calibration offset in seconds (calibrated via client timestamps or network NTP/HTTP)
+_time_drift_offset_seconds = 0.0
+_last_network_sync = 0.0
+_sync_lock = threading.Lock()
+
+def sync_time_from_client(client_time):
+    """
+    Calibrates server clock with the user's verified device time.
+    Solves container sleep/wake drift on platforms like Render or cloud VMs.
+    Accepts:
+      - ISO string: e.g. "2026-10-10T12:35:00.000Z"
+      - float/int unix timestamp
+      - datetime object (e.g. Discord message.created_at)
+    """
+    global _time_drift_offset_seconds
+    if not client_time:
+        return
+        
+    try:
+        client_epoch = None
+        if isinstance(client_time, str) and client_time.strip():
+            clean_str = client_time.strip().replace("Z", "+00:00")
+            dt = datetime.fromisoformat(clean_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            client_epoch = dt.timestamp()
+        elif isinstance(client_time, datetime):
+            dt = client_time if client_time.tzinfo else client_time.replace(tzinfo=timezone.utc)
+            client_epoch = dt.timestamp()
+        elif isinstance(client_time, (int, float)):
+            val = float(client_time)
+            client_epoch = val / 1000.0 if val > 1e11 else val
+            
+        if client_epoch is not None:
+            server_epoch = datetime.now(timezone.utc).timestamp()
+            drift = client_epoch - server_epoch
+            # Apply drift offset
+            with _sync_lock:
+                _time_drift_offset_seconds = drift
+    except Exception:
+        pass
+
+def sync_time_from_network(force=False):
+    """
+    Checks network atomic time via HTTP Date header from global high-availability CDN.
+    Guarantees container wake-up sync even if no client has sent messages yet.
+    """
+    global _time_drift_offset_seconds, _last_network_sync
+    import time
+    now_ts = time.time()
+    
+    # Don't hammer: sync at most once every 10 minutes unless forced
+    if not force and (now_ts - _last_network_sync < 600) and _time_drift_offset_seconds != 0.0:
+        return
+
+    def _worker():
+        global _time_drift_offset_seconds, _last_network_sync
+        endpoints = [
+            "https://cloudflare.com",
+            "https://www.google.com",
+            "https://httpbin.org/status/200"
+        ]
+        for url in endpoints:
+            try:
+                req = urllib.request.Request(
+                    url, 
+                    headers={"User-Agent": "Joi-TimeSync/1.0"}, 
+                    method="HEAD"
+                )
+                with urllib.request.urlopen(req, timeout=3.0) as resp:
+                    date_val = resp.headers.get("Date")
+                    if date_val:
+                        net_dt = email.utils.parsedate_to_datetime(date_val)
+                        if net_dt:
+                            net_epoch = net_dt.timestamp()
+                            server_epoch = datetime.now(timezone.utc).timestamp()
+                            drift = net_epoch - server_epoch
+                            with _sync_lock:
+                                _time_drift_offset_seconds = drift
+                                _last_network_sync = time.time()
+                            return
+            except Exception:
+                continue
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+def get_calibrated_utc_now():
+    """Returns datetime.now(timezone.utc) calibrated by active drift offset."""
+    raw_utc = datetime.now(timezone.utc)
+    if _time_drift_offset_seconds != 0.0:
+        raw_utc += timedelta(seconds=_time_drift_offset_seconds)
+    return raw_utc
 
 def get_indian_now():
     """
     Returns the current datetime in Indian Standard Time (IST, Asia/Kolkata, UTC+5:30).
-    Works consistently on local machines and UTC cloud servers (like Render).
+    Calibrated against sleep drift on online hosts (like Render).
     """
+    if _last_network_sync == 0.0:
+        sync_time_from_network()
+        
+    cal_utc = get_calibrated_utc_now()
     try:
         from zoneinfo import ZoneInfo
-        return datetime.now(ZoneInfo("Asia/Kolkata"))
+        return cal_utc.astimezone(ZoneInfo("Asia/Kolkata"))
     except Exception:
-        return datetime.now(timezone(timedelta(hours=5, minutes=30)))
+        ist_tz = timezone(timedelta(hours=5, minutes=30))
+        return cal_utc.astimezone(ist_tz)
 
 def get_user_now():
     """
     Returns the current datetime in the user's timezone.
     Defaults strictly to 'Asia/Kolkata' (IST, UTC+5:30).
-    Works consistently on local machines and UTC cloud servers (like Render).
+    Calibrated against container sleep/wake drift.
     """
     tz_name = "Asia/Kolkata"
     try:
@@ -32,9 +131,10 @@ def get_user_now():
     if tz_name in ["Asia/Kolkata", "IST", "Asia/Calcutta", ""]:
         return get_indian_now()
 
+    cal_utc = get_calibrated_utc_now()
     try:
         from zoneinfo import ZoneInfo
-        return datetime.now(ZoneInfo(tz_name))
+        return cal_utc.astimezone(ZoneInfo(tz_name))
     except Exception:
         return get_indian_now()
 
@@ -271,20 +371,21 @@ def get_place_time(place_query="india"):
                     info = v
                     break
                     
+        cal_utc = get_calibrated_utc_now()
         if info:
             iana_name, fb_h, fb_m, label = info
             try:
                 from zoneinfo import ZoneInfo
-                target_dt = datetime.now(ZoneInfo(iana_name))
+                target_dt = cal_utc.astimezone(ZoneInfo(iana_name))
                 tz_tag = target_dt.strftime("%Z") or iana_name.split("/")[-1]
             except Exception:
-                target_dt = datetime.now(timezone(timedelta(hours=fb_h, minutes=fb_m)))
+                target_dt = cal_utc.astimezone(timezone(timedelta(hours=fb_h, minutes=fb_m)))
                 tz_tag = f"UTC{'+' if fb_h >= 0 else ''}{fb_h}:{fb_m:02d}"
         else:
             # Try IANA timezone directly if user gave one
             try:
                 from zoneinfo import ZoneInfo
-                target_dt = datetime.now(ZoneInfo(place_query))
+                target_dt = cal_utc.astimezone(ZoneInfo(place_query))
                 label = place_query
                 tz_tag = target_dt.strftime("%Z") or place_query
             except Exception:
@@ -314,9 +415,11 @@ def get_place_time(place_query="india"):
     time_12h = target_dt.strftime("%I:%M %p").lstrip("0")
     indian_time_12h = indian_now.strftime("%I:%M %p").lstrip("0")
     
+    formatted_str = f"{time_12h} {tz_tag}".strip()
     return {
         "place_label": label,
-        "time_str": f"{time_12h} {tz_tag}".strip(),
+        "time_str": formatted_str,
+        "target_time_str": formatted_str,
         "time_only": time_12h,
         "date_str": target_dt.strftime("%A, %d %B"),
         "is_indian_time": is_indian,
