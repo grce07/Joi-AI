@@ -41,31 +41,35 @@ def sync_time_from_client(client_time):
         if client_epoch is not None:
             server_epoch = datetime.now(timezone.utc).timestamp()
             drift = client_epoch - server_epoch
-            # Apply drift offset
-            with _sync_lock:
-                _time_drift_offset_seconds = drift
+            # Only apply drift if significant (>= 1.5s) and realistic (<= 2 days)
+            # This protects against micro-jitter and bad client device dates
+            if 1.5 <= abs(drift) <= 172800:
+                with _sync_lock:
+                    _time_drift_offset_seconds = drift
     except Exception:
         pass
 
 def sync_time_from_network(force=False):
     """
-    Checks network atomic time via HTTP Date header from global high-availability CDN.
-    Guarantees container wake-up sync even if no client has sent messages yet.
+    Silently checks network atomic time via HTTP Date header in the background.
+    Guarantees container wake-up sync without blocking execution.
     """
     global _time_drift_offset_seconds, _last_network_sync
     import time
     now_ts = time.time()
     
-    # Don't hammer: sync at most once every 10 minutes unless forced
-    if not force and (now_ts - _last_network_sync < 600) and _time_drift_offset_seconds != 0.0:
+    # Don't hammer: sync at most once every 15 minutes unless forced
+    if not force and (now_ts - _last_network_sync < 900):
         return
 
+    _last_network_sync = now_ts
+
     def _worker():
-        global _time_drift_offset_seconds, _last_network_sync
+        global _time_drift_offset_seconds
         endpoints = [
+            "https://httpbin.org/status/200",
             "https://cloudflare.com",
-            "https://www.google.com",
-            "https://httpbin.org/status/200"
+            "https://www.google.com"
         ]
         for url in endpoints:
             try:
@@ -74,7 +78,7 @@ def sync_time_from_network(force=False):
                     headers={"User-Agent": "Joi-TimeSync/1.0"}, 
                     method="HEAD"
                 )
-                with urllib.request.urlopen(req, timeout=3.0) as resp:
+                with urllib.request.urlopen(req, timeout=2.5) as resp:
                     date_val = resp.headers.get("Date")
                     if date_val:
                         net_dt = email.utils.parsedate_to_datetime(date_val)
@@ -82,14 +86,17 @@ def sync_time_from_network(force=False):
                             net_epoch = net_dt.timestamp()
                             server_epoch = datetime.now(timezone.utc).timestamp()
                             drift = net_epoch - server_epoch
-                            with _sync_lock:
-                                _time_drift_offset_seconds = drift
-                                _last_network_sync = time.time()
+                            if 1.5 <= abs(drift) <= 172800:
+                                with _sync_lock:
+                                    _time_drift_offset_seconds = drift
                             return
             except Exception:
                 continue
 
-    threading.Thread(target=_worker, daemon=True).start()
+    try:
+        threading.Thread(target=_worker, daemon=True).start()
+    except Exception:
+        pass
 
 def get_calibrated_utc_now():
     """Returns datetime.now(timezone.utc) calibrated by active drift offset."""
@@ -222,6 +229,10 @@ WORLD_LOCATIONS = {
     "istanbul": ("Europe/Istanbul", 3, 0, "Istanbul, Turkey"),
 
     # Europe & UK
+    "europe": ("Europe/Paris", 1, 0, "Europe (CET)"),
+    "cet": ("Europe/Paris", 1, 0, "Central European Time (CET)"),
+    "cest": ("Europe/Paris", 2, 0, "Central European Summer Time (CEST)"),
+    "bst": ("Europe/London", 1, 0, "British Summer Time (BST)"),
     "london": ("Europe/London", 0, 0, "London, UK"),
     "uk": ("Europe/London", 0, 0, "UK"),
     "united kingdom": ("Europe/London", 0, 0, "United Kingdom"),
@@ -270,6 +281,10 @@ WORLD_LOCATIONS = {
     "moscow": ("Europe/Moscow", 3, 0, "Moscow, Russia"),
 
     # Americas - USA & Canada
+    "usa": ("America/New_York", -5, 0, "USA (Eastern Time)"),
+    "us": ("America/New_York", -5, 0, "US (Eastern Time)"),
+    "america": ("America/New_York", -5, 0, "America (Eastern Time)"),
+    "united states": ("America/New_York", -5, 0, "United States (Eastern Time)"),
     "new york": ("America/New_York", -5, 0, "New York"),
     "nyc": ("America/New_York", -5, 0, "New York City"),
     "new york city": ("America/New_York", -5, 0, "New York City"),
@@ -454,20 +469,26 @@ def detect_time_query(text):
 
     # Core time inquiry patterns
     time_query_patterns = [
-        r"\b(?:what(?:'s|\s+is)?\s+(?:the\s+)?time|what\s+time\s+is\s+it)\b",
-        r"\b(?:tell\s+me\s+(?:the\s+)?time|check\s+the\s+time|time\s+check)\b",
+        r"\b(?:what(?:'s|\s+is)?\s+(?:the\s+)?time|what\s+time\s+is\s+it)(?:\s+(?:right\s+)?now)?\b",
+        r"\b(?:tell\s+me\s+(?:the\s+)?time|check\s+the\s+time|time\s+check)(?:\s+now)?\b",
         r"\b(?:current\s+time|time\s+right\s+now|time\s+now)\b",
         r"\b(?:do\s+you\s+(?:know|have)\s+(?:the\s+)?time|got\s+the\s+time)\b",
         r"\b(?:what\s+time\s+do\s+you\s+have|what\s+time\s+you\s+got)\b",
         r"\b(?:what\s+is\s+your\s+time|what's\s+your\s+time|what\s+time\s+is\s+it\s+(?:with|there|by)\s+you)\b",
         r"\btime\s+(?:in|at|for|of)\s+([a-zA-Z\s]+)",
-        r"\b([a-zA-Z\s]+)\s+time\b",
         r"\bwhat\s+time\s+is\s+it\s+(?:in|at)\s+([a-zA-Z\s]+)",
         r"\bwhat(?:'s|\s+is)?\s+(?:the\s+)?time\s+(?:in|at)\s+([a-zA-Z\s]+)"
     ]
 
     is_query = any(re.search(pat, lower) for pat in time_query_patterns)
-    if not is_query and lower in ["time?", "time", "time please", "current time?"]:
+    if not is_query:
+        # Check location + "time" (e.g. "tokyo time", "india time", "london time")
+        for loc_key in WORLD_LOCATIONS.keys():
+            if re.search(r"\b" + re.escape(loc_key) + r"\s+time\b", lower):
+                is_query = True
+                break
+
+    if not is_query and lower in ["time?", "time", "time please", "current time?", "time now?"]:
         is_query = True
 
     if not is_query:

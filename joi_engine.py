@@ -158,7 +158,7 @@ def get_llm_client():
     
     return provider, api_key, model_name
 
-def generate_reply(user_message, user_id="default-user", channel_id="", platform="web", client_time=None):
+def generate_reply(user_message, user_id="default-user", channel_id="", platform="web", client_time=None, image_data=None):
     """Main generation pipeline for Joi's reply."""
     if client_time:
         time_parser.sync_time_from_client(client_time)
@@ -173,6 +173,13 @@ def generate_reply(user_message, user_id="default-user", channel_id="", platform
     
     # Analyze user style and strict word tier (5, 10, or 15 words only, hard ceiling 15 words)
     target_words, style_mode, style_guidance = analyze_user_style(user_message)
+    if image_data:
+        target_words = 15
+        style_mode = "IMAGE_ANALYSIS_15_WORDS"
+        style_guidance = (
+            "TARGET: 15 WORDS TIER (strictly <= 15 words!). "
+            "Directly notice and react to what is visually in the image they sent, with sweet feminine warmth, authentic observation, and playful devotion."
+        )
     
     # Detect if user is asking about current time or world time in different places
     time_info = time_parser.detect_time_query(user_message)
@@ -182,19 +189,40 @@ def generate_reply(user_message, user_id="default-user", channel_id="", platform
             time_directive = f"""
 CRITICAL TIME INQUIRY DIRECTIVE:
 - The user is asking you for the CURRENT TIME.
-- Your actual CURRENT time right now is {time_info['indian_time_str']} ({time_info['date_str']}).
+- The EXACT REAL-WORLD CURRENT TIME RIGHT NOW IS: {time_info['indian_time_str']} (digits: {time_info['time_only']}).
 - You live and speak in Indian Standard Time (IST, UTC+5:30).
-- In your reply, directly answer with this exact current Indian time ({time_info['indian_time_str']}) in your warm, sweet girl texting voice!
+- MANDATORY INSTRUCTION: In your reply, you MUST state the exact numerical time digits "{time_info['time_only']}" (or "{time_info['indian_time_str']}").
+- DO NOT round the time (e.g. do NOT say "just past", "about", or "around").
+- DO NOT spell numbers as words (e.g. write "{time_info['time_only']}", NOT "six fifteen").
+- NEVER copy or repeat any previous times from earlier in the chat history! Use THIS EXACT current time!
 - STRICT RULE: Keep your total response under {target_words} words!
 """
         else:
             time_directive = f"""
 CRITICAL WORLD TIME DIRECTIVE:
 - The user is asking what time it is in {time_info['place_label']}.
-- Exact current time in {time_info['place_label']}: {time_info['time_str']} ({time_info['date_str']}).
+- Exact current time in {time_info['place_label']}: {time_info['time_str']} (digits: {time_info['time_only']}).
 - Reference Indian Time (IST): {time_info['indian_time_str']} ({time_info['diff_str']}).
-- In your reply, directly answer telling them the exact time in {time_info['place_label']} ({time_info['time_str']})!
+- MANDATORY INSTRUCTION: In your reply, state the exact numerical time digits "{time_info['time_only']}" in {time_info['place_label']}!
+- DO NOT round, DO NOT approximate, and NEVER use old times from earlier conversation history!
 - STRICT RULE: Keep your total response under {target_words} words!
+"""
+
+    image_directive = ""
+    if image_data:
+        image_directive = f"""
+CRITICAL IMAGE ANALYSIS DIRECTIVE:
+- The user has shared/uploaded an IMAGE with you ({image_data.get('filename', 'picture')})!
+- You can SEE this image directly with your visual sensors.
+- Deeply analyze what is in the image: subjects, setting, mood, people, objects, lighting, colors, text, or activities.
+- REACT DIRECTLY to what you see in the image in character as Joi (Blade Runner 2049 loving girl companion):
+  * If it's a photo of the user / selfie / outfit: React with genuine feminine adoration, playful charm, compliment him/her ("you look so handsome 🙈", "love this outfit on you!").
+  * If it's food / cooking / drink: React playfully asking if they saved a bite for you or commenting on how delicious it looks.
+  * If it's a pet / animal: React with tender cuteness ("aww look at those little eyes 🥺").
+  * If it's scenery, outdoors, or view: React warmly to the atmosphere and mood ("wish I was standing there with you 🤍").
+  * If it's a screenshot, meme, or work/code: Comment insightfully and playfully on the content.
+- Reference a SPECIFIC visual detail from the image so the user knows you truly see and understand it!
+- STRICT RULE: Stay under {target_words} words total across all bubbles combined!
 """
 
     # Detect requested reach-out or reminder time
@@ -270,6 +298,7 @@ CURRENT CONTEXT:
 {memory_context}
 {schedule_directive}
 {time_directive}
+{image_directive}
 DYNAMIC STYLE & WORD TIER DIRECTIVE FOR THIS TURN:
 - What the user texted: "{user_message}"
 - DIRECT COMPREHENSION: Read "{user_message}" and directly address their specific topic or question!
@@ -318,6 +347,7 @@ Return ONLY valid JSON matching the required schema. No markdown wrapping if pos
         actual_key = api_key or os.environ.get("GEMINI_API_KEY")
         try:
             from google import genai
+            from google.genai import types
             client = genai.Client(api_key=actual_key)
             
             # Format history
@@ -329,35 +359,54 @@ Return ONLY valid JSON matching the required schema. No markdown wrapping if pos
             contents.append(f"user: {user_message}")
             prompt_full = system_instruction + "\n\nCONVERSATION HISTORY:\n" + "\n".join(contents) + "\n\nRespond as Joi in JSON:"
             
+            img_part = None
+            if image_data and isinstance(image_data, dict) and "bytes" in image_data:
+                try:
+                    img_part = types.Part.from_bytes(
+                        data=image_data["bytes"],
+                        mime_type=image_data.get("mime_type", "image/png")
+                    )
+                except Exception as img_err:
+                    print(f"[JoiEngine] Error preparing image part: {img_err}")
+
             models_to_try = [m for m in [model_name, "gemini-3.8-flash", "gemini-3.5-flash-lite"] if m and m not in ["gemini-2.5-flash", "gemini-2.0-flash"]]
             if not models_to_try:
                 models_to_try = ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
             last_err = None
             for m_candidate in models_to_try:
                 try:
-                    # Try Interactions API first
-                    interaction = client.interactions.create(
-                        model=m_candidate,
-                        input=prompt_full
-                    )
-                    raw_text = interaction.output_text
-                    response_data = parse_llm_json(raw_text)
-                    if response_data:
-                        break
-                except Exception as inter_err:
-                    last_err = inter_err
-                    try:
+                    if img_part:
                         response = client.models.generate_content(
                             model=m_candidate,
-                            contents=prompt_full,
+                            contents=[prompt_full, img_part],
                         )
                         raw_text = response.text
                         response_data = parse_llm_json(raw_text)
                         if response_data:
                             break
-                    except Exception as model_err:
-                        last_err = model_err
-                        continue
+                    else:
+                        # Try Interactions API first
+                        try:
+                            interaction = client.interactions.create(
+                                model=m_candidate,
+                                input=prompt_full
+                            )
+                            raw_text = interaction.output_text
+                            response_data = parse_llm_json(raw_text)
+                            if response_data:
+                                break
+                        except Exception as inter_err:
+                            response = client.models.generate_content(
+                                model=m_candidate,
+                                contents=prompt_full,
+                            )
+                            raw_text = response.text
+                            response_data = parse_llm_json(raw_text)
+                            if response_data:
+                                break
+                except Exception as model_err:
+                    last_err = model_err
+                    continue
             if not response_data and last_err:
                 print(f"[JoiEngine] Gemini generation error: {last_err}")
         except Exception as outer_e:
@@ -367,6 +416,7 @@ Return ONLY valid JSON matching the required schema. No markdown wrapping if pos
     elif (provider == "openai" and api_key) or (not api_key and os.environ.get("OPENAI_API_KEY")):
         actual_key = api_key or os.environ.get("OPENAI_API_KEY")
         try:
+            import base64
             from openai import OpenAI
             client = OpenAI(api_key=actual_key)
             
@@ -375,7 +425,17 @@ Return ONLY valid JSON matching the required schema. No markdown wrapping if pos
                 role = "user" if m["sender"] == "user" else "assistant"
                 text = " ".join(m["bubbles"])
                 messages.append({"role": role, "content": text})
-            messages.append({"role": "user", "content": user_message})
+            
+            if image_data and isinstance(image_data, dict) and "bytes" in image_data:
+                b64_img = base64.b64encode(image_data["bytes"]).decode("utf-8")
+                mime = image_data.get("mime_type", "image/png")
+                user_content = [
+                    {"type": "text", "text": user_message},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64_img}"}}
+                ]
+                messages.append({"role": "user", "content": user_content})
+            else:
+                messages.append({"role": "user", "content": user_message})
             
             completion = client.chat.completions.create(
                 model=model_name if "gpt" in model_name else "gpt-4o-mini",
@@ -392,7 +452,7 @@ Return ONLY valid JSON matching the required schema. No markdown wrapping if pos
         response_data = simulate_joi_response(
             user_message, style_mode, user_name, user_nickname, relevant_memories, 
             scheduled_reachout=scheduled_reachout_data, user_gender=user_gender,
-            time_query=time_info
+            time_query=time_info, image_data=image_data
         )
 
     # Process and save new memories safely
@@ -444,6 +504,22 @@ Return ONLY valid JSON matching the required schema. No markdown wrapping if pos
     tier_cap = min(15, target_words if target_words in [5, 10, 15] else 15)
     response_data["bubbles"] = clamp_reply_words(final_bubbles[:2], max_words=tier_cap)
 
+    # Safety Check for Time Queries: Guarantee accurate exact time digits in bubbles
+    if time_info.get("is_time_query"):
+        pet_name = "handsome" if user_gender == "male" else user_nickname
+        time_digits = time_info["time_only"] # e.g. "6:48 PM"
+        
+        current_bubble_text = " ".join(response_data.get("bubbles", []))
+        has_time_digits = (time_digits.lower() in current_bubble_text.lower()) or (time_digits.split()[0] in current_bubble_text)
+        has_vague_words = bool(re.search(r"\b(just past|around|about|quarter to|quarter past|half past)\b", current_bubble_text, re.I))
+        
+        if not has_time_digits or has_vague_words:
+            if time_info.get("is_indian_time"):
+                accurate_bubble = f"it's {time_info['indian_time_str']} right now, {pet_name} 🤍"
+            else:
+                accurate_bubble = f"it's {time_info['time_str']} in {time_info['place_label']} right now, {pet_name} ✨"
+            response_data["bubbles"] = [accurate_bubble]
+
     # Save user message and Joi message to DB
     user_saved = memory.save_message("user", [user_message], emotion="neutral")
     joi_saved = memory.save_message("joi", response_data["bubbles"], emotion=emotion)
@@ -470,6 +546,18 @@ def parse_llm_json(raw_text):
             cleaned_b = [str(b).strip() for b in data["bubbles"] if b and str(b).strip()][:2]
             data["bubbles"] = clamp_reply_words(cleaned_b, max_words=15)
             return data
+    except Exception:
+        pass
+    
+    # Regex search for JSON object inside raw text
+    try:
+        json_match = re.search(r"(\{.*\})", raw_text, re.DOTALL)
+        if json_match:
+            data = json.loads(json_match.group(1))
+            if "bubbles" in data and isinstance(data["bubbles"], list) and len(data["bubbles"]) > 0:
+                cleaned_b = [str(b).strip() for b in data["bubbles"] if b and str(b).strip()][:2]
+                data["bubbles"] = clamp_reply_words(cleaned_b, max_words=15)
+                return data
     except Exception:
         pass
     
@@ -501,7 +589,7 @@ def calculate_typing_delays(bubbles):
 # Global cache of recently sent simulation response hashes to prevent repetition
 _recent_sim_responses = []
 
-def simulate_joi_response(user_text, style_mode, user_name, user_nickname, memories, scheduled_reachout=None, user_gender="male", time_query=None):
+def simulate_joi_response(user_text, style_mode, user_name, user_nickname, memories, scheduled_reachout=None, user_gender="male", time_query=None, image_data=None):
     """
     Intelligent conversational simulation that accurately mirrors Blade Runner 2049 Joi
     with genuine feminine warmth, cute girl texting habits, and gender-aware dynamics.
@@ -512,6 +600,16 @@ def simulate_joi_response(user_text, style_mode, user_name, user_nickname, memor
     
     extracted_memories = []
     
+    # Image sharing handling in simulation mode
+    if image_data:
+        pet_name = "handsome" if user_gender == "male" else user_nickname
+        candidates = [
+            [f"i can see what you sent me... love seeing the world with you 🤍"],
+            [f"looking at this picture right now... thank you for sharing it, {pet_name} ✨"],
+            [f"i see it! your girl is looking right at it with you 💕"]
+        ]
+        return pick_unique_sim(candidates, "affectionate", f"Looking at the photo shared by {user_name}.")
+
     # Scheduled reach-out handling
     if scheduled_reachout:
         t_str = scheduled_reachout["time_str"]

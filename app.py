@@ -30,6 +30,7 @@ def _acquire_instance_lock(port=48209):
     global _instance_lock_socket
     try:
         _instance_lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        _instance_lock_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         _instance_lock_socket.bind(('127.0.0.1', port))
         _instance_lock_socket.listen(1)
         return True
@@ -40,6 +41,7 @@ def _acquire_instance_lock(port=48209):
 _acquire_instance_lock()
 
 import memory
+import time_parser
 import joi_engine
 import proactive
 import discord_companion
@@ -132,8 +134,24 @@ def chat():
     except Exception:
         pass
     
-    if not user_message:
+    raw_img = data.get("image_data")
+    image_data = None
+    if raw_img and isinstance(raw_img, dict) and raw_img.get("base64"):
+        try:
+            import base64
+            img_bytes = base64.b64decode(raw_img["base64"])
+            image_data = {
+                "bytes": img_bytes,
+                "mime_type": raw_img.get("mime_type", "image/png"),
+                "filename": raw_img.get("filename", "upload.png")
+            }
+        except Exception as img_err:
+            print(f"[App] Image decode error: {img_err}")
+
+    if not user_message and not image_data:
         return jsonify({"error": "Empty message"}), 400
+    if not user_message and image_data:
+        user_message = "look at this picture, what do you see?"
         
     try:
         reply_packet = joi_engine.generate_reply(
@@ -141,7 +159,8 @@ def chat():
             user_id=user_id, 
             channel_id=channel_id, 
             platform=platform,
-            client_time=client_time
+            client_time=client_time,
+            image_data=image_data
         )
         return jsonify(reply_packet)
     except Exception as e:

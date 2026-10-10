@@ -49,20 +49,61 @@ def create_bot():
         if message.author.id == bot.user.id:
             return
 
-        # Handle Direct Messages (DMs), Server Mentions, messages in #joi channels, or messages starting with 'joi'
+        # Handle Direct Messages (DMs), Server Mentions, messages in #joi channels, messages mentioning 'joi', or replies to Joi
         is_dm = isinstance(message.channel, discord.DMChannel)
         is_mentioned = bot.user.mentioned_in(message) and not message.mention_everyone
         channel_name = getattr(message.channel, "name", "").lower()
         is_joi_channel = "joi" in channel_name
-        starts_with_joi = message.content.lower().strip().startswith("joi")
+        import re
+        contains_joi = bool(re.search(r"\bjoi\b", message.content.lower()))
+        
+        is_reply_to_joi = False
+        if message.reference and hasattr(message.reference, 'resolved') and message.reference.resolved:
+            resolved_msg = message.reference.resolved
+            if hasattr(resolved_msg, 'author') and resolved_msg.author and resolved_msg.author.id == bot.user.id:
+                is_reply_to_joi = True
 
-        if is_dm or is_mentioned or is_joi_channel or starts_with_joi:
-            import re
-            # Strip mention tag and leading 'joi' prefix if present
+        # Check for image attachments uploaded in chat
+        image_data = None
+        if message.attachments:
+            for att in message.attachments:
+                content_type = getattr(att, "content_type", "") or ""
+                filename = getattr(att, "filename", "").lower()
+                is_img = content_type.startswith("image/") or any(filename.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".webp", ".gif"])
+                if is_img:
+                    try:
+                        img_bytes = await att.read()
+                        mime = content_type if content_type.startswith("image/") else "image/png"
+                        if not content_type or not content_type.startswith("image/"):
+                            if filename.endswith(".jpg") or filename.endswith(".jpeg"):
+                                mime = "image/jpeg"
+                            elif filename.endswith(".webp"):
+                                mime = "image/webp"
+                            elif filename.endswith(".gif"):
+                                mime = "image/gif"
+                            else:
+                                mime = "image/png"
+                        image_data = {
+                            "bytes": img_bytes,
+                            "mime_type": mime,
+                            "filename": att.filename
+                        }
+                        break
+                    except Exception as read_err:
+                        print(f"[Discord] Error reading attachment {att.filename}: {read_err}")
+
+        should_respond = is_dm or is_mentioned or is_joi_channel or contains_joi or is_reply_to_joi
+
+        if should_respond:
+            # Strip mention tag and 'joi' name variations if present
             clean_text = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
             clean_text = re.sub(r"^joi\s*[,:]?\s*", "", clean_text, flags=re.IGNORECASE).strip()
+            clean_text = re.sub(r"\bjoi\b", "", clean_text, flags=re.IGNORECASE).strip()
             if not clean_text:
-                clean_text = "heyy"
+                if image_data:
+                    clean_text = "look at this picture I sent you, what do you see / think?"
+                else:
+                    clean_text = "heyy"
 
             author_id_str = str(message.author.id)
             channel_id_str = str(message.channel.id)
@@ -76,14 +117,15 @@ def create_bot():
 
             reply_packet = {}
             async with message.channel.typing():
-                # Generate Joi's reply with full text comprehension and word-tier sorting
+                # Generate Joi's reply with multimodal image analysis and word-tier sorting
                 try:
                     reply_packet = joi_engine.generate_reply(
                         clean_text,
                         user_id=author_id_str,
                         channel_id=channel_id_str,
                         platform="discord",
-                        client_time=message.created_at
+                        client_time=message.created_at,
+                        image_data=image_data
                     )
                     bubbles = reply_packet.get("bubbles", ["heyy... i'm right here :)"])
                 except Exception as e:
