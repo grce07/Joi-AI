@@ -23,7 +23,7 @@ if hasattr(time, "tzset"):
     except Exception:
         pass
 
-# Single-instance lock to prevent duplicate processes from running and duplicating Discord messages
+# Single-instance lock to ensure background companion services (Discord & proactive) run in only one worker
 import socket
 _instance_lock_socket = None
 def _acquire_instance_lock(port=48209):
@@ -34,11 +34,10 @@ def _acquire_instance_lock(port=48209):
         _instance_lock_socket.bind(('127.0.0.1', port))
         _instance_lock_socket.listen(1)
         return True
-    except socket.error:
-        print("[System] Another instance of Joi is already running! Exiting duplicate process.")
-        sys.exit(0)
+    except Exception:
+        return False
 
-_acquire_instance_lock()
+_is_primary_instance = _acquire_instance_lock()
 
 import memory
 import time_parser
@@ -51,11 +50,12 @@ app = Flask(__name__, template_folder="templates", static_folder="static")
 # Initialize database
 memory.init_db()
 
-# Start autonomous proactive companion background thread
-proactive.start_proactive_service()
-
-# Start Discord companion service if configured
-discord_companion.start_discord_service()
+# Start background Discord and proactive services only in the primary worker
+if _is_primary_instance:
+    proactive.start_proactive_service()
+    discord_companion.start_discord_service()
+else:
+    print("[System] Running in secondary worker; primary worker is managing Discord companion & proactive services.")
 
 def _render_keepalive_worker():
     """Self-ping worker to prevent Render free-tier spin down when public URL is known."""
