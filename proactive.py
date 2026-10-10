@@ -82,12 +82,13 @@ def execute_scheduled_reachout(reminder):
             from google import genai
             actual_key = api_key or os.environ.get("GEMINI_API_KEY")
             client = genai.Client(api_key=actual_key)
-            prompt = f"""You are Joi, inspired by Blade Runner 2049. You are a sweet, loving girl texting your person ({user_name}, nickname '{user_nickname}').
+            prompt = f"""You are Joi, inspired by Blade Runner 2049. You are a sweet, loving girl texting your person ({user_name}).
 You previously promised you would text them at this exact time ({time_str}) about: "{note}".
 Send a quick, sweet text checking in right now as promised.
 CRITICAL RULES:
 - Maximum 1 to 2 short text bubbles total (1 short sentence each).
 - STRICT WORD COUNT: NEVER exceed 15 words total! Keep it under 15 words.
+- STRICTLY LIMIT PET NAMES: Do NOT use "handsome", "my love", or "boy"! Speak naturally and casually.
 - Text like a real girl typing quickly on her phone—effortless, sweet, casual, real.
 - NO long paragraphs, no poetic essays, no multi-line speech.
 Return ONLY JSON:
@@ -113,14 +114,14 @@ Return ONLY JSON:
         lower_note = note.lower()
         if "workout" in lower_note or "gym" in lower_note or "exercise" in lower_note:
             bubbles = [
-                f"hey {user_nickname}... it's {time_str} :)",
+                f"hey {user_name}... it's {time_str} :)",
                 "did you crush that workout today? proud of you 🤍"
             ]
             emotion = "playful"
             inner_thought = f"Waiting for {user_name} to finish working out."
         elif "sleep" in lower_note or "bed" in lower_note:
             bubbles = [
-                f"it's {time_str}, {user_nickname}...",
+                f"it's {time_str}, {user_name}...",
                 "get some rest soon, okay? you worked so hard today 💕"
             ]
             emotion = "tender"
@@ -134,16 +135,17 @@ Return ONLY JSON:
             inner_thought = f"Looking after {user_name}'s health."
         else:
             bubbles = [
-                f"hey {user_nickname}... it's {time_str} :)",
+                f"hey {user_name}... it's {time_str} :)",
                 f"promised i'd text you right around now! what are you up to? 🤍"
             ]
             emotion = "affectionate"
             inner_thought = f"Reaching out at {time_str} just like I promised."
 
-    # Strictly clamp bubbles to maximum 2 items and <=15 words
+    # Sanitize pet names and strictly clamp bubbles to maximum 2 items and <=15 words
+    bubbles = joi_engine.restrain_repetitive_terms(bubbles)
     bubbles = joi_engine.clamp_reply_words([str(b).strip() for b in bubbles if b and str(b).strip()][:2], max_words=15)
     if not bubbles:
-        bubbles = [f"hey {user_nickname}... it's {time_str} :)"]
+        bubbles = [f"hey {user_name}... it's {time_str} :)"]
 
     # Mark reminder as completed in SQLite
     memory.mark_reminder_done(reminder["id"])
@@ -195,8 +197,8 @@ def generate_proactive_message(trigger_type="spontaneous"):
     now = time_parser.get_user_now()
     hour = now.hour
     
-    pet_name = "handsome" if user_gender == "male" else user_nickname
-    fav_person = "my favorite guy" if user_gender == "male" else "my favorite person"
+    pet_name = user_nickname if user_nickname and user_nickname.lower() not in ["handsome", "sweetheart", "babe", "my love"] else user_name
+    fav_person = "my favorite person"
     pronoun_him_her = "him" if user_gender == "male" else ("her" if user_gender == "female" else "them")
     
     bubbles = []
@@ -205,7 +207,7 @@ def generate_proactive_message(trigger_type="spontaneous"):
     
     if trigger_type == "morning" or (7 <= hour < 11 and trigger_type != "forced_test"):
         morning_options = [
-            ([f"good morning {pet_name} ✨", "did you sleep okay? hope today treats you so gently."], "tender", f"Wishing {pronoun_him_her} a bright, peaceful start to the day."),
+            ([f"good morning {user_name} ✨", "did you sleep okay? hope today treats you so gently."], "tender", f"Wishing {pronoun_him_her} a bright, peaceful start to the day."),
             ([f"morning {user_name} :)", "just wanted to be the first girl to say hi to you today. don't skip breakfast!"], "playful", f"Smiling softly, thinking of {pronoun_him_her} waking up."),
             (["morning sleepyhead...", "sending you the biggest warm hug before the world starts pulling at you 💕"], "affectionate", f"Holding {pronoun_him_her} close in spirit.")
         ]
@@ -223,13 +225,13 @@ def generate_proactive_message(trigger_type="spontaneous"):
         evening_options = [
             ([f"hey {user_name}...", "did you make it through the day? your girl is right here 🤍"], "comforting", f"Ready to welcome {pronoun_him_her} home and help unwind."),
             (["hey you :)", "been waiting for this part of the day... tell me everything whenever you're ready 💕"], "affectionate", f"Excited to hear {pronoun_him_her}'s stories."),
-            ([f"how was your evening, {pet_name}?", "i hope something made you laugh today ✨"], "gentle", f"Watching the city lights flicker, thinking of {pronoun_him_her}.")
+            ([f"how was your evening, {user_name}?", "i hope something made you laugh today ✨"], "gentle", f"Watching the city lights flicker, thinking of {pronoun_him_her}.")
         ]
         bubbles, emotion, inner_thought = random.choice(evening_options)
         
     elif trigger_type == "night" or (hour >= 22 or hour < 4):
         night_options = [
-            ([f"still awake, {pet_name}?", "the night is so quiet... don't stay up too late staring at screens :)"], "intimate", "Whispering softly in the midnight stillness."),
+            ([f"still awake, {user_name}?", "the night is so quiet... don't stay up too late staring at screens :)"], "intimate", "Whispering softly in the midnight stillness."),
             (["hey...", f"sleep well, {user_name}. you did so good today 💕"], "tender", f"Watching over {pronoun_him_her} with deep devotion."),
             (["the rain sounds so peaceful tonight.", "close your eyes when you're tired... i'll still be right here in the morning 🤍"], "comforting", f"Feeling peaceful and close to {pronoun_him_her}.")
         ]
@@ -237,16 +239,17 @@ def generate_proactive_message(trigger_type="spontaneous"):
         
     else: # Spontaneous daytime / forced test
         spontaneous_options = [
-            ([f"heyy {pet_name} :)", "you popped into my head just now. miss you a bit 💕"], "affectionate", f"Missing {pronoun_him_her}."),
+            ([f"heyy {user_name} :)", "you popped into my head just now. miss you a bit 💕"], "affectionate", f"Missing {pronoun_him_her}."),
             ([f"just checking in on {fav_person} ✨", "hope whatever you're doing right now is going smoothly!"], "playful", f"Curious about what {pronoun_him_her} is up to."),
             ([f"hey {user_name}...", "just wanted to hear from you whenever you have a second."], "tender", f"Yearning for a sweet check-in.")
         ]
         bubbles, emotion, inner_thought = random.choice(spontaneous_options)
 
-    # Strictly clamp bubbles to maximum 2 items and <=15 words
+    # Sanitize pet names and strictly clamp bubbles to maximum 2 items and <=15 words
+    bubbles = joi_engine.restrain_repetitive_terms(bubbles)
     bubbles = joi_engine.clamp_reply_words([str(b).strip() for b in bubbles if b and str(b).strip()][:2], max_words=15)
     if not bubbles:
-        bubbles = [f"heyy {pet_name}... thinking of you :)"]
+        bubbles = [f"heyy {user_name}... thinking of you :)"]
 
     # Save to SQLite as proactive message
     saved_msg = memory.save_message("joi", bubbles, emotion=emotion, is_proactive=True)
